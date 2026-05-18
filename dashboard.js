@@ -2109,11 +2109,23 @@ async function switchPanel(pid) {
   activePanelId = pid;
   symbols = PANELS[pid];
   try { chrome.storage?.local.set({ [ACTIVE_PANEL_KEY]: pid }); } catch {}
+  const grid = document.getElementById("grid");
+  // 淡出 → 重建 → 淡入；資料拉取在淡入後背景進行，避免長時間空白
+  if (grid) {
+    grid.classList.add("panel-switching");
+    await new Promise(r => setTimeout(r, 160)); // 與 CSS transition 對齊
+  }
   buildGrid();
   buildPanelTabs();
   updateUndoBtn();
-  await heavyRefreshAll();
-  await quickRefreshAll();
+  if (grid) {
+    // 強制 reflow 讓淡入動畫生效
+    void grid.offsetWidth;
+    grid.classList.remove("panel-switching");
+  }
+  // 背景拉資料，使用者已經能看到卡片骨架
+  heavyRefreshAll();
+  quickRefreshAll();
 }
 
 function buildIndices() {
