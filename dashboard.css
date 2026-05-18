@@ -356,6 +356,26 @@ button.ghost  { color: #9aa0a6; }
   position: relative; overflow: visible;
   transition: border-color .2s, transform .12s;
 }
+/* 左上角索引徽章（對應快捷鍵 1~9） */
+.card .card-idx {
+  position: absolute;
+  top: -8px; left: -8px;
+  min-width: 22px; height: 22px;
+  padding: 0 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #4fc3f7 0%, #2196f3 100%);
+  color: #0b0d11;
+  font-size: 12px; font-weight: 800;
+  font-family: ui-monospace, Consolas, "SF Mono", monospace;
+  border-radius: 11px;
+  border: 2px solid #14171c;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  z-index: 3;
+  pointer-events: auto;
+  user-select: none;
+  line-height: 1;
+}
+.card:hover .card-idx { background: linear-gradient(135deg, #80d8ff 0%, #42a5f5 100%); }
 .card:hover { border-color: #3a4250; transform: translateY(-1px); }
 .card[draggable="true"] { cursor: grab; }
 .card.dragging { opacity: .4; cursor: grabbing; }

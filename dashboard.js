@@ -1672,15 +1672,22 @@ function buildGrid() {
   const grid = $("grid");
   grid.innerHTML = "";
   const tpl = $("cardTpl");
-  for (const sym of symbols) {
+  symbols.forEach((sym, i) => {
     const node = tpl.content.cloneNode(true);
     const card = node.querySelector(".card");
     card.dataset.symbol = sym;
+    card.dataset.idx = String(i + 1);
+    // 左上角索引徽章（對應快捷鍵 1~9 跳到該卡片）
+    const idxBadge = document.createElement("span");
+    idxBadge.className = "card-idx";
+    idxBadge.textContent = String(i + 1);
+    idxBadge.title = `快捷鍵：${i + 1}（跳到此卡片）`;
+    card.appendChild(idxBadge);
     card.querySelector(".sym").textContent = sym;
     card.classList.add("loading");
     // draggable 只在「排序模式」下開啟，避免與 hover tooltip 衝突
     grid.appendChild(node);
-  }
+  });
   bindCardDrag(grid);
   bindCardLongPress(grid);
   bindGridDrop(grid);
