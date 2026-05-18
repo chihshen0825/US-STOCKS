@@ -8947,6 +8947,7 @@ function bindWsTestButton(card, sym) {
  * ──────────────────────────────────────────────────────────── */
 const UPDATE_INFO_KEY_PAGE = "dash_update_info";
 const UPDATE_DISMISS_KEY = "dash_update_dismissed_ver";
+const DEFAULT_REPO_PAGE = "chihshen0825/US-STOCKS"; // 與 background.js 的 DEFAULT_REPO 同步
 
 function _curVer() { try { return chrome.runtime.getManifest().version; } catch { return "0"; } }
 
@@ -8983,7 +8984,8 @@ async function openUpdateStatusPopover() {
   const existing = document.getElementById("updateStatusPop");
   if (existing) { existing.remove(); return; }
   const r = await new Promise(res => chrome.storage.local.get(["dash_update_repo", UPDATE_INFO_KEY_PAGE], res));
-  const repo = (r?.["dash_update_repo"] || "").trim();
+  const storedRepo = (r?.["dash_update_repo"] || "").trim();
+  const repo = storedRepo || DEFAULT_REPO_PAGE;
   const info = r?.[UPDATE_INFO_KEY_PAGE] || null;
   const cur = _curVer();
   const pop = document.createElement("div");
