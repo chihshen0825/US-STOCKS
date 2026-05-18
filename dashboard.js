@@ -1916,8 +1916,10 @@ function buildPanelTabs() {
       : "";
     const tipActive = `✓ 目前分頁：${p.name}${hk ? `\n快捷鍵：${hk}（Ctrl+\` 循環切換）` : ""}`;
     const tipIdle   = `點此切換到「${p.name}」${hk ? `\n快捷鍵：${hk}（Ctrl+\` 循環切換）` : ""}`;
+    const tipText = p.id === activePanelId ? tipActive : tipIdle;
+    const tipAttr = tipText.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     return `<span class="panel-tab-group" data-pid="${p.id}">` +
-      `<button class="panel-tab${p.id===activePanelId?" active":""}" data-pid="${p.id}" title="${p.id===activePanelId?tipActive:tipIdle}">${p.name}${hk ? `<span class="panel-tab-hk" aria-hidden="true">${hk}</span>` : ""}</button>` +
+      `<button class="panel-tab${p.id===activePanelId?" active":""}" data-pid="${p.id}" data-tip="${tipAttr}">${p.name}${hk ? `<span class="panel-tab-hk" aria-hidden="true">${hk}</span>` : ""}</button>` +
       `<button class="panel-edit-btn" data-edit-pid="${p.id}" title="編輯 [${p.name}] 的股票代碼">⚙</button>` +
       extra +
     `</span>`;

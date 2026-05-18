@@ -1419,6 +1419,26 @@ tr.row-hot td.sym { color: #ff7043; font-weight: 700; }
   vertical-align: middle; letter-spacing: 0.2px;
 }
 .panel-tab.active .panel-tab-hk { color: #e6e6e6; border-color: #4a525c; background: rgba(0,0,0,0.25); }
+/* 自製 tooltip：水平置中於 tab 文字下方，取代瀏覽器原生 title（會跟著游標位置偏移） */
+.panel-tab[data-tip] { position: relative; }
+.panel-tab[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%; top: calc(100% + 8px);
+  transform: translateX(-50%) translateY(-4px);
+  background: #1a1d23; color: #e6e6e6;
+  border: 1px solid #3a3d44; border-radius: 6px;
+  padding: 6px 10px; font-size: 12px; line-height: 1.5;
+  white-space: pre;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.55);
+  opacity: 0; pointer-events: none;
+  transition: opacity .15s ease, transform .15s ease;
+  z-index: 9999;
+}
+.panel-tab[data-tip]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
 /* 非作用中的分頁：標示「點此切換」、放亮、滑鼠移上去明顯回饋，避免使用者沒注意到能切換 */
 .panel-tab-group { position: relative; }
 .panel-tab-group:not(:has(.panel-tab.active)) {
