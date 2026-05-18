@@ -1,0 +1,68 @@
+name: Auto Release
+
+# 每次 push 到 main，若 manifest.json 的 version 比現有最新 Release 高，
+# 就自動建 tag v<version> + GitHub Release，並把整個資料夾打包成 zip 當 asset。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "manifest.json"
+  workflow_dispatch: # 也允許手動觸發
+
+permissions:
+  contents: write # 建 tag / release 需要
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 需要全部 tag 來判斷是否已存在
+
+      - name: Read version from manifest.json
+        id: ver
+        run: |
+          VER=$(jq -r .version manifest.json)
+          if [ -z "$VER" ] || [ "$VER" = "null" ]; then
+            echo "::error::manifest.json 沒有 version 欄位"
+            exit 1
+          fi
+          TAG="v$VER"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"     >> "$GITHUB_OUTPUT"
+          echo "Detected version: $VER  →  tag: $TAG"
+
+      - name: Check if tag already exists
+        id: exist
+        run: |
+          if git rev-parse "refs/tags/${{ steps.ver.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag ${{ steps.ver.outputs.tag }} 已存在，略過。"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build zip asset
+        if: steps.exist.outputs.exists == 'false'
+        run: |
+          OUT="us-stocks-${{ steps.ver.outputs.version }}.zip"
+          # 把整個 repo 打包，排除 .git / .github / 其他開發雜物
+          zip -r "$OUT" . \
+            -x ".git/*" ".github/*" \
+               "TechAnalysisAPI_Sample/*" \
+               "*.zip" \
+               ".gitignore"
+          ls -la "$OUT"
+          echo "ASSET=$OUT" >> "$GITHUB_ENV"
+
+      - name: Create Release
+        if: steps.exist.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.tag }}
+          generate_release_notes: true # 自動列出自上次以來的 commit 摘要
+          files: ${{ env.ASSET }}
