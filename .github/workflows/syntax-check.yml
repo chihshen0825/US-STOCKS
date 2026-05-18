@@ -1,0 +1,30 @@
+name: Syntax Check
+
+# 每次 push / PR 都對 JS 檔做語法檢查；有錯就擋 Release。
+# release.yml 沒有 needs 這個 job，但有 syntax error commit 不會通過，使用者也能在 PR 看到 X。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: node --check on all JS
+        run: |
+          set -e
+          for f in $(git ls-files '*.js'); do
+            echo "▶ $f"
+            node --check "$f"
+          done
+          echo "✓ All JS files passed syntax check."
