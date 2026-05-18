@@ -2959,7 +2959,11 @@ function renderExtended(card, intra) {
   }
   wrap.style.display = "flex";
   wrap.className = "extended";
-  wrap.innerHTML = preHtml + postHtml;
+  const next = preHtml + postHtml;
+  if (wrap._lastHtml !== next) { // 內容沒變就不重繪，避免閃爍
+    wrap.innerHTML = next;
+    wrap._lastHtml = next;
+  }
 }
 
 function renderHeavy(card, sym, heavy) {
