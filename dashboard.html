@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>短線技術面儀表板</title>
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="title">
+      <span class="logo">📈</span>
+      <div class="title-text">
+        <span class="h1">短線儲表板</span>
+        <span class="h2">3 檔即時監看</span>
+        <label class="bar-count title-bar-count" title="K 線與 MACD 顯示的根數（水平軌長度）">
+          根數
+          <select id="barCount">
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="15">15</option>
+            <option value="30">30</option>
+            <option value="60" selected>60</option>
+            <option value="90">90</option>
+            <option value="120">120</option>
+            <option value="180">180</option>
+            <option value="240">240</option>
+            <option value="300">300</option>
+            <option value="360">360</option>
+            <option value="420">420</option>
+            <option value="480">480</option>
+            <option value="540">540</option>
+            <option value="600">600</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <div class="toolbar-stack">
+      <span class="row-label">正向</span>
+      <button id="topHotBtn" class="top-btn hot-btn" title="🔥 飆股潛力分（score1×1+score5×0.7+5分↑×1.5+5m量爆+1.5−RSI5≥80×2）TOP3">🔥 飆股潛力</button>
+      <button id="topWr050UpBtn" class="top-btn wr050-up-btn" title="↗ +0.5% 勝率 TOP3：以近 20 根 1m 為樣本，未來 10 分鐘內最高漲幅 ≥ +0.5% 的機率最高 3 檔">↗ +0.5%勝率</button>
+      <button id="top1Btn"  class="top-btn" title="從監控清單挑出 1 分線分數最高的 3 檔放入監看">TOP3 1分 BUY</button>
+      <button id="top5Btn"  class="top-btn" title="從監控清單挑出 5 分線分數最高的 3 檔放入監看">TOP3 5分 BUY</button>
+      <button id="topReboundBtn" class="top-btn rebound-btn" title="今日跌深、但 1分5分線訊號轉強 / MACD-H 轉正的反彈候選">TOP3 跌深反彈</button>
+      <button id="topGain1mBtn" class="top-btn gain1m-btn" title="備選清單中最近 1 分鐘漲幅最高的 3 檔">TOP3 1分↑漲幅</button>
+      <span class="row-label">反向</span>
+      <button id="topColdBtn" class="top-btn cold-btn" title="❄ 超跌續弱分（-score1×1-score5×0.7+5分↓×1.5+5m量爆+1.5−RSI5≤20×2）TOP3">❄ 超跌續弱</button>
+      <button id="topWr050DownBtn" class="top-btn wr050-down-btn" title="↘ -0.5% 賠率 TOP3：以近 20 根 1m 為樣本，未來 10 分鐘內最低跌幅 ≤ -0.5% 的機率最高 3 檔">↘ -0.5%賠率</button>
+      <button id="top1SellBtn" class="top-btn sell-btn" title="監控清單中 1 分線分數最低的 3 檔">TOP3 1分 SELL</button>
+      <button id="top5SellBtn" class="top-btn sell-btn" title="監控清單中 5 分線分數最低的 3 檔">TOP3 5分 SELL</button>
+      <button id="topPullbackBtn" class="top-btn pullback-btn" title="今日漲多、但 1分5分線訊號轉弱 / MACD-H 轉負的回檔候選">TOP3 漲高回檔</button>
+      <button id="topLoss1mBtn" class="top-btn loss1m-btn" title="備選清單中最近 1 分鐘跌幅最大的 3 檔">TOP3 1分↓跌幅</button>
+    </div>
+    <div class="header-actions">
+      <div class="tf-group" id="tfGroup" title="切換 K 線 / MACD 時間框架">
+        <button data-tf="1m"  class="tf active">1分</button>
+        <button data-tf="5m"  class="tf">5分</button>
+        <button data-tf="30m" class="tf">30分</button>
+        <button data-tf="60m" class="tf">60分</button>
+      </div>
+      <span id="updated" class="updated">--:--:--</span>
+      <span id="apiHealth" class="api-health api-ok" title="Yahoo API 健康狀態（近 60s 失敗率）">🟢</span>
+      <label class="auto" title="自動刷新時間間隔">
+        <input type="checkbox" id="autoRefresh" checked>
+        自動
+        <select id="refreshInterval" title="刷新間隔">
+          <option value="1">1 秒</option>
+          <option value="2">2 秒</option>
+          <option value="3">3 秒</option>
+          <option value="4">4 秒</option>
+          <option value="5" selected>5 秒</option>
+          <option value="6">6 秒</option>
+          <option value="7">7 秒</option>
+          <option value="8">8 秒</option>
+          <option value="9">9 秒</option>
+          <option value="10">10 秒</option>
+          <option value="15">15 秒</option>
+          <option value="30">30 秒</option>
+        </select>
+      </label>
+      <div class="undo-group">
+        <button id="thresholdBtn" title="門檻 / Preset（保守 / 標準 / 激進）">🎛</button>
+        <button id="updateBtn" title="檢查線上更新（GitHub Releases）">⬆</button>
+        <button id="refreshBtn" title="手動刷新">⟳</button>
+      </div>
+      <label class="auto auto-click" title="每隔 N 秒自動點擊指定按鈕（會避開正在執行的刷新）">
+        <input type="checkbox" id="autoClickEnable">
+        自動點擊
+        <select id="autoClickTarget" title="自動點擊目標">
+          <option value="">— 選擇按鈕 —</option>
+          <optgroup label="刷新">
+            <option value="refreshBtn">⟳ 手動刷新</option>
+          </optgroup>
+          <optgroup label="正向 TOP3">
+            <option value="topHotBtn">🔥 飆股潛力</option>
+            <option value="topWr050UpBtn">↗ +0.5%勝率</option>
+            <option value="top1Btn">TOP3 1分 BUY</option>
+            <option value="top5Btn">TOP3 5分 BUY</option>
+            <option value="topReboundBtn">TOP3 跌深反彈</option>
+            <option value="topGain1mBtn">TOP3 1分↑漲幅</option>
+          </optgroup>
+          <optgroup label="反向 TOP3">
+            <option value="topColdBtn">❄ 超跌續弱</option>
+            <option value="topWr050DownBtn">↘ -0.5%賠率</option>
+            <option value="top1SellBtn">TOP3 1分 SELL</option>
+            <option value="top5SellBtn">TOP3 5分 SELL</option>
+            <option value="topPullbackBtn">TOP3 漲高回檔</option>
+            <option value="topLoss1mBtn">TOP3 1分↓跌幅</option>
+          </optgroup>
+        </select>
+        <input type="number" id="autoClickInterval" min="5" max="3600" step="1" value="30" title="間隔秒數（5–3600）">
+        <span class="ac-unit">秒</span>
+        <span id="autoClickStatus" class="auto-click-status" title="距下次自動點擊的倒數">--</span>
+      </label>
+    </div>
+  </header>
+
+  <section id="indices" class="indices"></section>
+
+  <section id="thresholdPanel" class="settings threshold-panel hidden">
+    <div class="settings-title">門檻 / Preset（目前：<span data-preset-current>標準</span>）</div>
+    <div class="threshold-hint">提示：滑鼠停在每個欄位的 <i class="thr-info">ⓘ</i> 圖示上，可看到完整說明、範例與對 1 分 / 5 分訊號、短線 / 波段建議的影響。</div>
+    <div class="threshold-presets">
+      <button class="threshold-preset-btn" data-preset="conservative">保守</button>
+      <button class="threshold-preset-btn" data-preset="standard">標準</button>
+      <button class="threshold-preset-btn" data-preset="aggressive">激進</button>
+    </div>
+    <div class="threshold-grid">
+      <label class="threshold-row"><span title="ATR(14)：近 14 根 K 棒的「平均真實波動幅度」÷ 收盤價，反映「現在這檔股票一根 K 棒大約震幾 %」。&#10;&#10;影響：&#10;• 1 分鐘 K：ATR < 此門檻 → 強制評為 HOLD（波動不足，1–5 分鐘內難以達到 0.25–0.5% 獲利目標）&#10;• 15 分鐘 K（波段）：用 0.4% 為內建門檻判斷波段是否值得進場&#10;• 同時影響「信心度」計算：ATR 越低 → scoreRaw 衰減越多&#10;&#10;範例：&#10;• 設 0.30 → 1 分 ATR 0.25% 的死水股全部 HOLD（保守）&#10;• 設 0.10 → 連窄幅整理也允許進場（激進，雜訊高）&#10;&#10;建議：日內當沖 0.20~0.35；波段 0.40~0.60">ATR 最小門檻 (%) <i class="thr-info">ⓘ</i></span>
+        <input type="range" data-thr="atrMin" min="0" max="2" step="0.05">
+        <output data-thr-out="atrMin"></output>
+      </label>
+      <label class="threshold-row"><span title="量爆倍數：「最近一根 K 棒成交量 ÷ 近 20 根平均量」≥ 此倍數 → 給 +1 分（看漲）或 -1 分（看跌）。&#10;&#10;影響：&#10;• 1 分鐘訊號：明顯放量上漲 → score1 +1，配合其他訊號可推上 BUY/STRONG BUY&#10;• 5 分鐘訊號：同樣機制，影響 score5&#10;• 「飆股潛力分」hotScore：5m 量爆 +1.5 加權，影響 🔥 飆 排序與 TOP3 挑選&#10;&#10;範例：&#10;• 設 3.0（標準）→ 量是 20 根均量 3 倍才算量爆&#10;• 設 1.5（敏感）→ 容易誤判，雜訊多但反應快&#10;• 設 5.0（嚴格）→ 只認爆量真突破，訊號少但精準&#10;&#10;建議：當沖 2.5~3.5；波段 3.0~4.0">量爆 (xMA20) <i class="thr-info">ⓘ</i></span>
+        <input type="range" data-thr="volBurst" min="1" max="10" step="0.1">
+        <output data-thr-out="volBurst"></output>
+      </label>
+      <label class="threshold-row"><span title="量爆-極端：當倍數 ≥ 此值時加碼計分（額外 +0.5），用來凸顯「真的有大事發生」的爆量。&#10;&#10;影響：&#10;• 1 分鐘 / 5 分鐘訊號 score 都會額外 +0.5/-0.5&#10;• 「飆股潛力分」hotScore 額外 +1（量爆-極端事件）&#10;&#10;範例：&#10;• 設 5.0（標準）→ 量爆 5 倍以上算極端&#10;• 設 8.0（嚴格）→ 幾乎只在新聞 / 財報日才觸發&#10;• 設 3.0（敏感）→ 與一般量爆界線模糊，重複加分&#10;&#10;建議：保持比「量爆」高 1.5~2x，避免界線重疊">量爆-極端 (xMA20) <i class="thr-info">ⓘ</i></span>
+        <input type="range" data-thr="volExtreme" min="1" max="15" step="0.1">
+        <output data-thr-out="volExtreme"></output>
+      </label>
+      <label class="threshold-row"><span title="分數門檻 - 多 / 空：訊號 score 達到 +此值 → BUY；達到 -此值 → SELL；中間 → HOLD。&#10;&#10;影響：&#10;• 1 分鐘訊號：score1 ≥ 此值顯示 BUY 徽章；≤ -此值顯示 SELL；其餘 HOLD&#10;• 5 分鐘訊號：同上邏輯套用 score5&#10;• 短線建議徽章（卡片右側）：依此門檻分類&#10;&#10;範例：&#10;• 設 2.0（標準）→ 至少 2 個正向因子才買進&#10;• 設 1.0（敏感）→ 任一個訊號就標 BUY，雜訊多&#10;• 設 4.0（嚴格）→ 半數因子同向才出手，訊號少但勝率高&#10;&#10;建議：日內 1.5~2.5；波段 2.5~3.5">分數門檻 - 多 / 空 <i class="thr-info">ⓘ</i></span>
+        <input type="range" data-thr="scoreBuy" min="1" max="8" step="0.5">
+        <output data-thr-out="scoreBuy"></output>
+      </label>
+      <label class="threshold-row"><span title="強多 / 強空 門檻：score 達到 +此值 → STRONG BUY（卡片徽章紅色閃爍 / 短線建議綠色閃爍）；≤ -此值 → STRONG SELL。&#10;&#10;影響：&#10;• 1m / 5m 訊號徽章升級為 STRONG BUY/SELL&#10;• 短線建議徽章觸發 advice-flash 動畫（注意吸睛）&#10;• 不影響 hotScore / coldScore 計算&#10;&#10;範例：&#10;• 設 5.0（標準）→ 多項訊號全部對齊才強推&#10;• 設 3.0（激進）→ 強訊號滿天飛，警示意義降低&#10;• 設 7.0（極嚴）→ 幾乎不會觸發，僅留作極端訊號&#10;&#10;建議：保持比「分數門檻 - 多 / 空」高 2~3 分">強多 / 強空 門檻 <i class="thr-info">ⓘ</i></span>
+        <input type="range" data-thr="scoreStrongBuy" min="2" max="12" step="0.5">
+        <output data-thr-out="scoreStrongBuy"></output>
+      </label>
+      <label class="threshold-row"><span title="刷新秒數：3 卡片監看的全量重抓間隔。每次會打 quote / chart(1m/5m/15m) 等多支 API。&#10;&#10;影響：&#10;• 數值越小 → 即時性高，但 API 請求變多，可能被 Yahoo 限速 → 自動延長 API 冷卻&#10;• 數值越大 → 省 API 額度，畫面延遲&#10;• 不影響任何計分公式，只影響資料新鮮度&#10;&#10;範例：&#10;• 設 2 秒（即時）→ 接近 streaming，但容易被限速&#10;• 設 5 秒（標準）→ 平衡&#10;• 設 15 秒（保守）→ 適合長時間掛機&#10;&#10;建議：盤中 2~5；盤前盤後 10~30">刷新秒數 (s) <i class="thr-info">ⓘ</i></span>
+        <input type="range" data-thr="refreshSec" min="1" max="30" step="1">
+        <output data-thr-out="refreshSec"></output>
+      </label>
+      <label class="threshold-row"><span title="API 冷卻基準：當 Yahoo Finance 回傳 429 / 999 限速時，內部會以此為基準暫停請求（會配合錯誤次數做指數退避）。&#10;&#10;影響：&#10;• 數值越大 → 被限速後恢復越慢，但更不容易再被封&#10;• 數值越小 → 嘗試恢復快，可能再次被限速&#10;• 只在限速事件發生時生效，不影響常規刷新&#10;&#10;範例：&#10;• 設 15 秒（標準）→ 實測穩定&#10;• 設 5 秒（激進）→ 容易循環限速&#10;• 設 60 秒（保守）→ 限速後幾乎一分鐘不動&#10;&#10;建議：保持 15~30；若頻繁被限速可調高到 45">API 冷卻基準 (s) <i class="thr-info">ⓘ</i></span>
+        <input type="range" data-thr="cooldownBaseSec" min="5" max="120" step="5">
+        <output data-thr-out="cooldownBaseSec"></output>
+      </label>
+    </div>
+    <div class="settings-actions">
+      <button data-act="reset-current" class="ghost" title="還原目前選取的 preset到原廠官方值">回預設</button>
+      <button data-act="close">關閉</button>
+    </div>
+  </section>
+
+  <section id="settingsPanel" class="settings hidden">
+    <div id="settingsTitle" class="settings-title">編輯股票代碼（0~3 檔，用空白或逗號分隔，例：INTC AMD PLTR）</div>
+    <input id="symbolsInput" type="text" placeholder="INTC AMD PLTR（可留空）">
+    <div class="settings-actions">
+      <button id="saveSymbols">儲存</button>
+      <button id="resetSymbols" class="ghost">回預設</button>
+      <button id="cancelSymbols" class="ghost">取消</button>
+    </div>
+    <div class="catalog">
+      <div class="catalog-title">快速挑選（點選加入 / 取消，0~3 檔）</div>
+      <div class="catalog-section">
+        <div class="catalog-section-title">個股</div>
+        <div class="chip-grid" data-cat="stocks"></div>
+      </div>
+      <div class="catalog-section">
+        <div class="catalog-section-title">ETF</div>
+        <div class="chip-grid" data-cat="etfs"></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="panelTabs" class="panel-tabs"></div>
+  <section id="grid" class="grid"></section>
+
+  <section id="watchlist" class="watchlist">
+    <div class="watchlist-head">
+      <span class="watchlist-title" title="快捷鍵：W 跳到此區（? 查看所有熱鍵）">備選清單訊號（1 分鐘訊號 / 5 分鐘訊號）<span class="sec-hk" aria-hidden="true">W</span></span>
+      <span class="watchlist-meta">
+        <span id="wlStatus" class="wl-status">載入中…</span>
+        <span id="wlUpdated" class="wl-updated">--:--:--</span>
+        <label class="wl-auto" title="備選清單自動刷新間距">
+          間距
+          <select id="wlInterval">
+            <option value="1">1 秒</option>
+            <option value="3">3 秒</option>
+            <option value="5">5 秒</option>
+            <option value="10">10 秒</option>
+            <option value="15">15 秒</option>
+            <option value="30">30 秒</option>
+            <option value="60" selected>60 秒</option>
+            <option value="90">90 秒</option>
+            <option value="120">120 秒</option>
+          </select>
+        </label>
+        <label class="wl-auto" title="關閉則不自動刷新備選清單（需手動按 ⟳）">
+          <input type="checkbox" id="wlAutoRefresh" checked>
+          自動
+        </label>
+        <button id="wlApplyTopBtn" class="ghost" title="以目前排序取前 3 名加入上方儀表板">↑ 套用排序前 3 名</button>
+        <button id="wlCopyBtn" class="ghost" title="複製目前清單（依排序）為 TSV 到剪貼簿">📋 複製</button>
+        <button id="wlRefreshBtn" title="重新計算備選清單">⟳</button>
+      </span>
+    </div>
+    <div class="watchlist-table-wrap">
+      <table id="wlTable" class="watchlist-table">
+        <thead>
+          <tr>
+            <th>代碼</th>
+            <th>名稱</th>
+            <th class="num">現價</th>
+            <th class="num">漲跌%</th>
+            <th class="num" title="盤前 (Pre-Market) 最後一筆撮合價 · 相對昨日收盤 (regularMarketPreviousClose)。&#10;時段：美股 04:00–09:30 ET。&#10;若該檔當日無盤前報價（流動性差）顯示 --。">盤前</th>
+            <th class="num" title="盤後 (After-Hours) 最後一筆撮合價 · 相對今日正規時段收盤 (regularMarketPrice)。&#10;時段：美股 16:00–20:00 ET。&#10;若該檔當日無盤後報價顯示 --。">盤後</th>
+            <th class="tf-1m" title="以最新 1 分鐘 K 線（EMA / MACD / RSI / 量能 / 漲跌位置）綜合判定的多空訊號與分數。分數越高越偏多、越低越偏空；≥5: STRONG BUY；2~4: BUY；-1~1: HOLD；-2~-4: SELL；≤-5: STRONG SELL">訊號(1分鐘)</th>
+            <th class="tf-5m" title="以最新 5 分鐘 K 線（EMA / MACD / RSI / 量能 / 漲跌位置）綜合判定的多空訊號與分數。分數越高越偏多、越低越偏空；≥5: STRONG BUY；2~4: BUY；-1~1: HOLD；-2~-4: SELL；≤-5: STRONG SELL">訊號(5分鐘)</th>
+            <th class="num tf-1m" title="+0.3% 勝率：以近 20 根 1m K 棒為樣本，逐根模擬『在此根收盤進場』後，未來 10 根 (約 10 分鐘) 內最高價相對進場價的最高漲幅是否 ≥ +0.3%。&#10;&#10;公式：count( max(Hᵢ₊₁..Hᵢ₊₁₀ − Cᵢ) / Cᵢ ≥ 0.003 ) / 20&#10;&#10;顏色：≥ 50% 綠（勝率高）、≤ 10% 紅（不易達標）。">+0.3%勝率</th>
+            <th class="num tf-1m" title="+0.5% 勝率：以近 20 根 1m K 棒為樣本，未來 10 根 K 棒最高價相對進場價漲幅 ≥ +0.5% 的比例。&#10;&#10;公式：count( max(Hᵢ₊₁..Hᵢ₊₁₀ − Cᵢ) / Cᵢ ≥ 0.005 ) / 20&#10;&#10;建議：≥ 40% 為高機率帶；&lt; 20% 改看其他候選。">+0.5%勝率</th>
+            <th class="num tf-1m" title="-0.5% 賠率：未來 10 根 K 棒最低價相對進場價跌幅 ≤ -0.5% 的比例。&#10;&#10;公式：count( min(Lᵢ₊₁..Lᵢ₊₁₀ − Cᵢ) / Cᵢ ≤ -0.005 ) / 20&#10;&#10;顏色：≥ 30% 紅（風險高）、≤ 5% 綠（下行壓力小）。&#10;搭配 +0.5% 勝率判斷盈虧比。">-0.5%賠率</th>
+            <th class="confluence-th" title="多時框共振 (MTF Confluence)：分別把 1m / 5m / 15m 訊號 score 轉成方向 (≥ +2 → 多、≤ -2 → 空、其餘 → 中)，再合成共振狀態：&#10;&#10;・三共振多 (3 多 0 空) — 訊號最強&#10;・雙共振多 (2 多 0 空) — 訊號偏多&#10;・分歧 (同時有多有空) — 建議觀望&#10;・三共振空 / 雙共振空 — 反向訊號強&#10;&#10;hover 共振 cell 內可看 1m / 5m / 15m 各自方向明細。">共振</th>
+            <th class="num" title="相對強度 RS% = 個股近 5 個交易日收盤報酬 − 對應大盤近 5 日收盤報酬。&#10;&#10;對標指數：US → SPY；TW → 0050；HK → 2800。&#10;&#10;・正：跑贏大盤 (逆勢強勢)&#10;・負：跑輸大盤&#10;&#10;用於判斷個股是否具備獨立性題材，避免抓到單純跟大盤漂浮的股票。">RS%</th>
+            <th class="num" title="🔥 飆股潛力分 (hotScore)：綜合多時框動能與量能的單一加權分數。&#10;&#10;公式：&#10;= score1Raw × 1.0&#10;+ score5Raw × 0.7&#10;+ (5分↑ ≥ 0.45% 時) × 1.5&#10;+ (5m 量比 ≥ 3 時) +1.5&#10;− (RSI5 ≥ 80 時) -2 (超買懲罰)&#10;+ (5分↓ ≤ -0.6% 時) 該負值 (下跌振幅扣分)&#10;&#10;判讀：&#10;・≥ 6 → 整列紅底高亮 (強烈飆股訊號)&#10;・≥ 3 → 進入 TOP3 候選&#10;・≤ -3 → 反向 ❄ 超跌續弱候選">🔥 飆</th>
+            <th class="num tf-5m tf-plain mom5-cell" title="5 分鐘動能 (向上)－盤前時段（4:00–09:30 ET）近 60 根 1m K 棒中，連續 5 根滑動視窗的最大漲幅。無該時段資料顯示 --。">5↑<span class="mom5-sess">盤前</span></th>
+            <th class="num tf-5m tf-plain mom5-cell" title="5 分鐘動能 (向上)－盤中時段（9:30–16:00 ET）近 60 根 1m K 棒中，連續 5 根滑動視窗的最大漲幅。主技術訊號評估區間。≥ 0.45% 標綠。">5↑<span class="mom5-sess">盤中</span></th>
+            <th class="num tf-5m tf-plain mom5-cell" title="5 分鐘動能 (向上)－盤後時段（16:00–20:00 ET）近 60 根 1m K 棒中，連續 5 根滑動視窗的最大漲幅。無該時段資料顯示 --。">5↑<span class="mom5-sess">盤後</span></th>
+            <th class="num tf-5m tf-plain mom5-cell" title="5 分鐘動能 (向下)－盤前時段（4:00–09:30 ET）近 60 根 1m K 棒中的最大跌幅。無該時段資料顯示 --。">5↓<span class="mom5-sess">盤前</span></th>
+            <th class="num tf-5m tf-plain mom5-cell" title="5 分鐘動能 (向下)－盤中時段（9:30–16:00 ET）近 60 根 1m K 棒中的最大跌幅。主技術訊號評估區間。≤ -0.45% 標紅。">5↓<span class="mom5-sess">盤中</span></th>
+            <th class="num tf-5m tf-plain mom5-cell" title="5 分鐘動能 (向下)－盤後時段（16:00–20:00 ET）近 60 根 1m K 棒中的最大跌幅。無該時段資料顯示 --。">5↓<span class="mom5-sess">盤後</span></th>
+            <th class="num tf-1m" title="最近一根 1m K 棒的瞬時變動：(Cₙ − Cₙ₋₁) / Cₙ₋₁ × 100%。&#10;&#10;反映『最即時』的 1 分鐘漲跌幅，常用來捕捉剛發生的脈衝。&#10;因樣本只有 1 根，雜訊高，需配合 score1 / score5 確認方向再進場。">最近1分鐘Δ%</th>
+            <th class="num tf-5m tf-plain" title="相對強弱指數 RSI(14) 在 5 分鐘 K 線上的最新值。&#10;&#10;公式：100 − 100 / (1 + avgGain₁₄ / avgLoss₁₄)，採 Wilder smoothing。&#10;&#10;・&gt; 70 超買，可能拉回&#10;・&lt; 30 超賣，可能反彈&#10;・50 為多空分水嶺&#10;&#10;極端值修正：RSI5 ≥ 80 在 🔥 飆 分扣 2、RSI5 ≤ 20 在 ❄ 超跌分扣 2 (避免追頂 / 撈底)。">RSI(5分)</th>
+            <th class="num tf-5m tf-plain" title="MACD 直方圖 = MACD − Signal，在 5 分鐘 K 線上的最新值。&#10;&#10;・MACD   = EMA(12) − EMA(26)&#10;・Signal = EMA(MACD, 9)&#10;&#10;・&gt; 0 動能偏多 (柱體越長越強)&#10;・&lt; 0 動能偏空&#10;・由負轉正 / 正轉負為常見短線轉折訊號 (零軸黃金 / 死亡交叉)&#10;&#10;同時參與 score1 / score5 計分中的動能分量。">MACD-H(5分)</th>
+            <th class="num" title="歷史勝率：取本機紀錄的近 30 筆已成熟 5m 訊號 (score ≥ 2 → 多、≤ -2 → 空)。&#10;&#10;在訊號發出後 15 分鐘檢查價格相對訊號當下：&#10;・變動方向 ✕ |變動 %| ≥ 0.2% → 命中 (win)&#10;・|變動 %| &lt; 0.2% → 中性 (不計勝負)&#10;&#10;勝率 = 命中數 / (命中 + 反向) × 100%&#10;副值為平均「有效報酬 %」(中性樣本不納入平均)。&#10;資料儲存於 localStorage[&quot;dash_sig_hist_v1&quot;]，每檔最多 200 筆。">勝率</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="simPanel" class="sim-panel">
+    <div class="sim-head">
+      <div class="sim-head-row sim-head-top">
+        <span class="sim-title" title="快捷鍵：S 跳到此區（? 查看所有熱鍵）">📈 模擬交易紀錄<span class="sec-hk" aria-hidden="true">S</span></span>
+        <span class="sim-spacer"></span>
+        <button type="button" id="simCopyBtn" class="ghost" title="複製目前清單為 CSV 到剪貼簿（可直接貼到 Excel / Google Sheets / AI 對話框）">📋 複製</button>
+        <button type="button" id="simExportCsvBtn" class="ghost" title="匯出目前清單為 CSV 檔案（含「今日」標記、可用 Excel 開啟分析）">📤 匯出 CSV</button>
+        <button type="button" id="simClearBtn" class="ghost" title="僅清除已結算（已平倉 / 已取消 / 已過期）的紀錄，未平倉與掛單保留">🧹 清除已結算</button>
+        <button type="button" id="simClearAllBtn" class="ghost" title="清除全部模擬紀錄（含未平倉、掛單、已結算），此動作無法復原">🗑 全部清除</button>
+      </div>
+      <div class="sim-stats" id="simStats">--</div>
+    </div>
+    <div class="sim-controls">
+      <div class="sim-auto-group">
+        <div class="sim-auto-actions sim-auto-actions-left">
+          <button type="button" id="simScanNowBtn" class="ghost" title="依目前規則掃描並下單一次">🔍 掃描並下單</button>
+        </div>
+        <div class="sim-auto-actions sim-auto-actions-right">
+          <span class="sim-fx-widget" title="匯率 1 USD = ? TWD。影響面板所有台幣換算。預設 31.5；啟動時會自動查詢一次線上匯率。點右側 🔄 可手動重查。">
+            <span class="sim-fx-lbl">USD→TWD</span>
+            <input type="number" id="simCfgFxUsdTwd" min="0.1" max="500" step="0.1" value="31.5">
+            <b id="simCfgFxUsdTwdVal" class="sim-fx-val">31.5</b>
+            <button type="button" id="simFxRefreshBtn" class="sim-fx-refresh" title="重新查詢線上匯率">🔄</button>
+          </span>
+          <span class="sim-auto-status" id="simAutoStatus"><span class="sim-auto-dot"></span>自動：關閉</span>
+          <button type="button" id="simAutoBtn" class="primary">▶ 啟用自動買入</button>
+        </div>
+      </div>
+      <div class="sim-rule" id="simRule">
+        <div class="rule-header" id="simRuleHeader" title="點擊收合 / 展開詳細規則摘要">
+          <span class="rule-chevron">▼</span>
+          <span class="rule-title">📋 目前規則</span>
+          <span class="rule-hint" id="simRuleHint">進場 · 目標 · 倉位 · 出場 · 成本 · 執行</span>
+          <div class="sim-kpi-row" id="simRuleKpis"></div>
+          <button type="button" id="simToggleBtn" class="ghost sim-rule-toggle" title="規則設定：收合 / 展開下方的規則設定面板">⚙</button>
+        </div>
+        <div class="sim-rule-summary" id="simRuleSummary">—</div>
+        <div class="sim-rule-groups" id="simRuleGroups">
+      <!-- ===== 1. 進場條件：誰能被買 ===== -->
+      <div class="sim-group">
+        <div class="sim-group-title">🎯 進場條件 <span class="sim-group-hint">決定哪些個股可以下單、何時觸發</span><button type="button" class="sim-group-reset" data-resetgroup="entry" title="還原本組為預設值">↶ 預設</button></div>
+        <div class="sim-ctrl-group">
+          <div class="sim-ctrl-pair sim-ctrl-pair-glow sim-ctrl-pair-tier-high">
+            <label class="sim-ctrl" title="同時可持有的單數上限（含 pending / open / selling）。1 = 一次只跑一筆，最保守。範圍 1 ~ 256。">
+              <span class="sim-ctrl-label">同時持單上限</span>
+              <input type="range" id="simCfgConc" min="1" max="256" step="1" value="1">
+              <b id="simCfgConcVal" class="sim-ctrl-val">1</b>
+            </label>
+            <label class="sim-ctrl" title="同一檔股票同時可持有的單數上限。1 = 同一檔不重複下單；>1 允許同檔加碼（在『同時持單上限』額度內）。">
+              <span class="sim-ctrl-label">每股最多持單</span>
+              <input type="range" id="simCfgPerSym" min="1" max="10" step="1" value="1">
+              <b id="simCfgPerSymVal" class="sim-ctrl-val">1 (不連續)</b>
+            </label>
+          </div>
+          <div class="sim-ctrl-pair sim-ctrl-pair-glow-cyan sim-ctrl-pair-tier-high">
+            <label class="sim-ctrl" title="目標漲幅（淨 %，含手續費後）。
+• 移動停利 = 關閉：達到即立刻平倉（限價賣在 target）
+• 移動停利 > 0：此值改為『鎖獲利啟動門檻』，達到後不賣，等回撚才賣">
+              <span class="sim-ctrl-label" id="simCfgTargetLabel">目標漲幅</span>
+              <input type="range" id="simCfgTarget" min="1" max="120" step="1" value="40">
+              <b id="simCfgTargetVal" class="sim-ctrl-val">0.40%</b>
+            </label>
+            <label class="sim-ctrl" title="移動停利（混 %）：啟用後，達『目標漲幅』時不立刻平倉，改進入『鎖獲利』狀態 → 從之後的峰值回撚超過此值才出場（讓利潤繼續跑）。
+例：目標 0.5%、trail 0.1%，買入後：
+ 1) 漲到 +0.5% → 進入鎖獲利狀態（不賣，繼續持有）
+ 2) 漲到 +1.0%（新峰值）→ 仍持有
+ 3) 回落到 +0.9%（峰值 −0.1%）→ trail 觸發，賣出鎖 +0.9%
+若未達目標就跌（如只到 +0.3% 就跌）→ 不觸發 trail，仍由停損 / 逾時決定。
+0 = 不啟用（達標立刻平倉）。">
+              <span class="sim-ctrl-label">移動停利</span>
+              <input type="range" id="simCfgTrailStop" min="0" max="300" step="1" value="0">
+              <b id="simCfgTrailStopVal" class="sim-ctrl-val">關閉</b>
+            </label>
+          </div>
+          <label class="sim-ctrl sim-ctrl-tier-med" title="持有時長上限。從成交開始計時，超過此時間仍未達標即視為『敗』（以當下市價結算）。">
+            <span class="sim-ctrl-label">測試時長</span>
+            <input type="range" id="simCfgWindow" min="1" max="390" step="1" value="90">
+            <b id="simCfgWindowVal" class="sim-ctrl-val">1h30m</b>
+          </label>
+          <div class="sim-ctrl-pair sim-ctrl-pair-tier-med">
+            <label class="sim-ctrl" title="進場前提：近期『漲 0.3% 的勝率』必須 ≥ 此 %。值越高越保守。">
+              <span class="sim-ctrl-label">漲 0.3% 門檻</span>
+              <input type="range" id="simCfgWrMin" min="5" max="100" step="1" value="60">
+              <b id="simCfgWrMinVal" class="sim-ctrl-val">60%</b>
+            </label>
+            <label class="sim-ctrl" title="進場前提：近期『漲 0.5% 的勝率』必須 ≥ 此 %。值越高越保守。">
+              <span class="sim-ctrl-label">漲 0.5% 門檻</span>
+              <input type="range" id="simCfgWrMin050" min="5" max="100" step="1" value="30">
+              <b id="simCfgWrMin050Val" class="sim-ctrl-val">30%</b>
+            </label>
+          </div>
+          <label class="sim-ctrl sim-ctrl-tier-high" title="保護等級（避免買到下跌機率高於上漲機率的個股）：
+0 = 不保護（最積極）
+1 = 漲 0.5% 機率 ≥ 跌 0.5% 機率
+2 = 漲 0.3% 機率 ≥ 跌 0.5% 機率
+3 = 漲 0.3% ≥ 漲 0.5% ≥ 跌 0.5%（最保守，預設）">
+            <span class="sim-ctrl-label">保護等級</span>
+            <input type="range" id="simCfgGradLv" min="0" max="3" step="1" value="3">
+            <b id="simCfgGradLvVal" class="sim-ctrl-val">3 保守</b>
+          </label>
+        </div>
+      </div>
+
+      <!-- ===== 2. 進場策略：用什麼價格下單 ===== -->
+      <div class="sim-group">
+        <div class="sim-group-title">📍 進場策略 <span class="sim-group-hint">決定買入價格與追價邏輯</span><button type="button" class="sim-group-reset" data-resetgroup="strategy" title="還原本組為預設值">↶ 預設</button></div>
+        <div class="sim-ctrl-group">
+          <label class="sim-ctrl sim-ctrl-fixed sim-ctrl-tier-high" title="買入價格策略（限價單模式）：
+0 = 目前價（市價單，立即成交）
+1 = 建議價與目前價的中間值（預設）
+2 = 建議價（最嚴格，需等價格回落）
+3 = 追價：起始用建議價，每隔『追價間隔』未成交就加價
+4 = 追價：起始用中間值，同上加價邏輯
+5 = 追價：起始用目前價，同上加價邏輯
+建議價來自近 5 分 VWAP 與低點區間，數學上保證 ≤ 目前價。">
+            <span class="sim-ctrl-label">買入價格</span>
+            <input type="range" id="simCfgEntryMode" min="0" max="5" step="1" value="4">
+            <b id="simCfgEntryModeVal" class="sim-ctrl-val">4 追價·中間</b>
+          </label>
+          <label class="sim-ctrl sim-chase-only sim-ctrl-tier-low" title="追價間隔（秒）— 僅追價模式有效。每隔幾秒檢查一次未成交訂單並加價。範圍 0.01 ~ 60 秒，每格 0.01 秒。">
+            <span class="sim-ctrl-label">追價間隔</span>
+            <input type="range" id="simCfgChaseBumpSec" min="0.01" max="60" step="0.01" value="0.1">
+            <b id="simCfgChaseBumpSecVal" class="sim-ctrl-val">0.10s</b>
+          </label>
+          <label class="sim-ctrl sim-chase-only sim-ctrl-tier-low" title="追價步幅（%）— 僅追價模式有效。每次加價幅度 = 下單時市價 × 此 %，最少 1 tick ($0.01)，上限為當下市價。範圍 0.01% ~ 25%，每格 0.01%。">
+            <span class="sim-ctrl-label">追價步幅</span>
+            <input type="range" id="simCfgChaseBumpPct" min="0.01" max="25" step="0.01" value="0.01">
+            <b id="simCfgChaseBumpPctVal" class="sim-ctrl-val">0.01%</b>
+          </label>
+          <label class="sim-ctrl sim-chase-only sim-ctrl-tier-low" title="追價時限（秒）— 僅追價模式有效。下單後超過此時間仍未成交就刪單（標記為未成交）。">
+            <span class="sim-ctrl-label">追價時限</span>
+            <input type="range" id="simCfgChaseMaxSec" min="10" max="1000" step="5" value="120">
+            <b id="simCfgChaseMaxSecVal" class="sim-ctrl-val">120s</b>
+          </label>
+          <label class="sim-ctrl sim-chase-only sim-ctrl-tier-low" title="狂飆閾值（%）— 當『目前市價 vs 目前限價』的價差 ≥ 此 %，視為股價狂飆，啟動加速追擊：
+• 跳過『追價間隔』節流，立即 bump
+• 步幅 ×『狂飆放大』倍
+• 並確保新限價直接『跳到當下市價 + 1 tick』之上（吃進對手 ask）
+設 0 = 關閉加速追擊（永遠用一般追價節奏）。範圍 0 ~ 5%，每格 0.05%。">
+            <span class="sim-ctrl-label">狂飆閾值</span>
+            <input type="range" id="simCfgChasePanicPct" min="0" max="5" step="0.05" value="0.5">
+            <b id="simCfgChasePanicPctVal" class="sim-ctrl-val">0.50%</b>
+          </label>
+          <label class="sim-ctrl sim-chase-only sim-ctrl-tier-low" title="狂飆放大倍數 — 觸發狂飆時，每次 bump 的『步幅』乘以這個倍數，且不受『追價間隔』節流（每 tick 都可加價）。範圍 1 ~ 50 倍。">
+            <span class="sim-ctrl-label">狂飆放大</span>
+            <input type="range" id="simCfgChasePanicMul" min="1" max="50" step="1" value="10">
+            <b id="simCfgChasePanicMulVal" class="sim-ctrl-val">×10</b>
+          </label>
+        </div>
+      </div>
+
+      <!-- ===== 2.5 出場策略：僅作用於停損 / 移動停利 / 逾時 ===== -->
+      <div class="sim-group">
+        <div class="sim-group-title">📤 出場策略 <span class="sim-group-hint">僅作用於 <b>停損 / 移動停利 / 逾時</b>；達標走「目標價限價單」一買進就掛在 target 等成交，不追低價出場</span><button type="button" class="sim-group-reset" data-resetgroup="exit" title="還原本組為預設值">↶ 預設</button></div>
+        <div class="sim-ctrl-group">
+          <label class="sim-ctrl sim-ctrl-fixed sim-ctrl-tier-high" title="賣出策略（僅作用於 停損 / 移動停利 / 逾時，達標不適用）：
+0 = 市價立刻成交（觸發出場 = 立刻以當下市價結算）
+1 = 追價（預設）：進入 selling 狀態，sellLimit 從當下市價開始，每隔『出場間隔』秒往下 -step%，模擬『殺低吃對手 bid』直到成交，或超過時限就用市價平倉。
+※ 達標出場一律走「目標價限價單」（買入瞬間就掛在 target 等成交），不受此設定影響。">
+            <span class="sim-ctrl-label">賣出策略</span>
+            <input type="checkbox" class="sim-toggle" id="simCfgExitMode" checked>
+            <b id="simCfgExitModeVal" class="sim-ctrl-val">1 追價賣出</b>
+          </label>
+          <label class="sim-ctrl sim-exit-chase-only sim-ctrl-tier-low" title="出場追價間隔（秒）— 僅追價賣出有效。每隔幾秒檢查未成交賣單並降價。範圍 0.01 ~ 60 秒，每格 0.01 秒。">
+            <span class="sim-ctrl-label">出場間隔</span>
+            <input type="range" id="simCfgExitChaseBumpSec" min="0.01" max="60" step="0.01" value="0.1">
+            <b id="simCfgExitChaseBumpSecVal" class="sim-ctrl-val">0.10s</b>
+          </label>
+          <label class="sim-ctrl sim-exit-chase-only sim-ctrl-tier-low" title="出場降價步幅（%）— 每次往下調整的 sellLimit = 觸發出場當下市價 × 此 %，最少 1 tick。範圍 0.01% ~ 25%，每格 0.01%。">
+            <span class="sim-ctrl-label">出場步幅</span>
+            <input type="range" id="simCfgExitChaseBumpPct" min="0.01" max="25" step="0.01" value="0.01">
+            <b id="simCfgExitChaseBumpPctVal" class="sim-ctrl-val">0.01%</b>
+          </label>
+          <label class="sim-ctrl sim-exit-chase-only sim-ctrl-tier-low" title="狂跌閾值（%）— 當『目前 sellLimit vs 目前市價』向下價差 ≥ 此 %，視為股價狂跌，啟動加速殺低：
+• 跳過『出場間隔』節流，立即往下 bump
+• 步幅 ×『狂跌放大』倍
+• 並確保新 sellLimit 直接『跌到當下市價 - 1 tick』以下（吃進對手 bid）
+設 0 = 關閉加速殺低（永遠用一般出場節奏）。範圍 0 ~ 5%，每格 0.05%。">
+            <span class="sim-ctrl-label">狂跌閾值</span>
+            <input type="range" id="simCfgExitChasePanicPct" min="0" max="5" step="0.05" value="0.5">
+            <b id="simCfgExitChasePanicPctVal" class="sim-ctrl-val">0.50%</b>
+          </label>
+          <label class="sim-ctrl sim-exit-chase-only sim-ctrl-tier-low" title="狂跌放大倍數 — 觸發狂跌時，每次 bump 的『步幅』乘以這個倍數，且不受『出場間隔』節流（每 tick 都可降價）。範圍 1 ~ 50 倍。">
+            <span class="sim-ctrl-label">狂跌放大</span>
+            <input type="range" id="simCfgExitChasePanicMul" min="1" max="50" step="1" value="10">
+            <b id="simCfgExitChasePanicMulVal" class="sim-ctrl-val">×10</b>
+          </label>
+
+        </div>
+      </div>
+
+      <!-- ===== 3. 風控 & 手續費：何時出場 + 成本 ===== -->
+      <div class="sim-group">
+        <div class="sim-group-title">💰 風控 &amp; 手續費 <span class="sim-group-hint">納入手續費後的淨損益，達標 / 停損都以淨 % 判定</span><button type="button" class="sim-group-reset" data-resetgroup="risk" title="還原本組為預設值">↶ 預設</button></div>
+        <div class="sim-ctrl-group">
+          <!-- 第一列：成本相關（金額 / 買進費 / 賣出費 / 預估成本靠右） -->
+          <label class="sim-ctrl sim-ctrl-glow sim-ctrl-tier-crit" title="每筆下單金額（USD）。實際股數 = floor(金額 / 限價)。設 0 表示不下單（僅統計）。範圍 $0 ~ $150,000，每格 $1,000。">
+            <span class="sim-ctrl-label">每筆下單金額</span>
+            <input type="range" id="simCfgAmount" min="0" max="150000" step="500" value="3500">
+            <b id="simCfgAmountVal" class="sim-ctrl-val">$3,500</b>
+          </label>
+          <label class="sim-ctrl sim-ctrl-double sim-ctrl-tier-med" title="買進手續費：USD 平盤費 + 金額 % 按比例費，可同時使用。多數美股券商 = $0 / 0%；IBKR fixed = $1 / 0%；IBKR Tiered ≈ $0 / 0.05%。">
+            <span class="sim-ctrl-label">買進手續費</span>
+            <div class="sim-ctrl-row">
+              <span class="sim-ctrl-sub">USD</span>
+              <input type="range" id="simCfgFeeBuy" min="0" max="20" step="1" value="1">
+              <b id="simCfgFeeBuyVal" class="sim-ctrl-val">$1.00</b>
+            </div>
+            <div class="sim-ctrl-row">
+              <span class="sim-ctrl-sub">%</span>
+              <input type="range" id="simCfgFeeBuyPct" min="0" max="150" step="1" value="0">
+              <b id="simCfgFeeBuyPctVal" class="sim-ctrl-val">0.00%</b>
+            </div>
+          </label>
+          <label class="sim-ctrl sim-ctrl-double sim-ctrl-tier-med" title="賣出手續費：% 比例費 + USD 平盤費，可同時使用。0.15% 為一般估值（含 SEC fee + TAF + 券商）；IBKR fixed 加 $1 USD。">
+            <span class="sim-ctrl-label">賣出手續費</span>
+            <div class="sim-ctrl-row">
+              <span class="sim-ctrl-sub">%</span>
+              <input type="range" id="simCfgFeeSell" min="0" max="50" step="1" value="15">
+              <b id="simCfgFeeSellVal" class="sim-ctrl-val">0.150%</b>
+            </div>
+            <div class="sim-ctrl-row">
+              <span class="sim-ctrl-sub">USD</span>
+              <input type="range" id="simCfgFeeSellUsd" min="0" max="20" step="1" value="0">
+              <b id="simCfgFeeSellUsdVal" class="sim-ctrl-val">$0.00</b>
+            </div>
+          </label>
+          <div class="sim-ctrl sim-ctrl-info sim-ctrl-end sim-ctrl-tier-low" title="依目前『每筆股數』和『手續費』估算來回成本與最低回本門檻">
+            <span class="sim-ctrl-label">預估成本（每筆）</span>
+            <b id="simFeeEstVal" class="sim-ctrl-val sim-ctrl-est">—</b>
+          </div>
+        </div>
+        <div class="sim-ctrl-group">
+          <!-- 第二列：風控觸發 + 過濾（停損 / 移動停利 / Kill Switch / 最小股價） -->
+          <label class="sim-ctrl sim-ctrl-tier-crit" title="停損（淨 %）：以含手續費後的淨虧損 % 為觸發；0 = 不啟用。短線建議 0.3~1.0%。">
+            <span class="sim-ctrl-label">停損</span>
+            <input type="range" id="simCfgStopLoss" min="0" max="50" step="1" value="35">
+            <b id="simCfgStopLossVal" class="sim-ctrl-val">-3.5%</b>
+          </label>
+
+          <label class="sim-ctrl sim-ctrl-tier-crit" title="今日最大容忍虧損（USD）：今日已結算淨損益 ≤ -此值 → 自動關閉「自動買入」。避免越輸越加碼。0 = 不啟用。建議 = 3 × 每筆下單金額 × 停損%。">
+            <span class="sim-ctrl-label">今日 Kill Switch</span>
+            <input type="range" id="simCfgDailyKill" min="0" max="5000" step="50" value="0">
+            <b id="simCfgDailyKillVal" class="sim-ctrl-val">關閉</b>
+          </label>
+          <label class="sim-ctrl sim-ctrl-tier-med" title="最小股價過濾（USD）：股價 < 此值 的個股不下單。低價股 spread 寬、sub-penny tick，隱性成本高。0 = 不過濾；建議 5~10。">
+            <span class="sim-ctrl-label">最小股價</span>
+            <input type="range" id="simCfgMinPrice" min="0" max="50" step="1" value="6">
+            <b id="simCfgMinPriceVal" class="sim-ctrl-val">≥ USD $6</b>
+          </label>
+          <label class="sim-ctrl sim-ctrl-tier-high" title="手續費上限（% of 實際成交金額）：預估『來回手續費 ÷ 實際成交金額』> 此值就跳過。低預算最容易踩到：固定買費 $1 在小金額上被攤提後比例放大、高價股零頭浪費更讓分母變小。例：IBKR Fixed（買 $1 + 賣 0.15%），預算 $1000：
+ &#8226; 股價 $20  → 50 股 = $1000，費 $1+$1.50 = $2.50 / $1000 = 0.250%（超過 0.20% → 擋）
+ &#8226; 股價 $200 → 5  股 = $1000，費 $1+$1.50 = $2.50 / $1000 = 0.250%（同上）
+ &#8226; 股價 $700 → 1  股 = $700（剩 $300 閒置），費 $1+$1.05 = $2.05 / $700 = 0.293%（更差 → 擋）
+對比預算 $3000、股價 $60：50 股 = $3000，費 $1+$4.50 = $5.50 / $3000 = 0.183%（通過）。
+預設 0.20%；0 = 不限。">
+            <span class="sim-ctrl-label">手續費上限 (超過手續費上限不下單)</span>
+            <input type="range" id="simCfgMaxFeePct" min="0" max="100" step="1" value="20">
+            <b id="simCfgMaxFeePctVal" class="sim-ctrl-val">≤ 0.20%</b>
+          </label>        </div>
+      </div>
+
+      <!-- ===== 4. 執行環境：在哪 / 何時 / 怎樣執行 ===== -->
+      <div class="sim-group">
+        <div class="sim-group-title"><span class="sim-text-glow">⚙️ 執行環境</span> <span class="sim-group-hint">本機回測或連線實單、成交模型、時段限制</span><button type="button" class="sim-group-reset" data-resetgroup="exec" title="還原本組為預設值">↶ 預設</button></div>
+        <div class="sim-ctrl-group">
+          <label class="sim-ctrl sim-ctrl-glow-pink sim-ctrl-tier-crit" title="0 = 本機模擬（純前端、不下實單，預設）
+1 = WebSocket 連接本機 TradingService (ws://127.0.0.1:1088/)，交由服務實際下單·追價·讀取成交·代掛賣出">
+            <span class="sim-ctrl-label">執行模式</span>
+            <input type="checkbox" class="sim-toggle" id="simCfgExecMode">
+            <b id="simCfgExecModeVal" class="sim-ctrl-val">0 本機模擬</b>
+            <span id="simWsStatus" class="sim-pill sim-ws-pill">本機模擬</span>
+          </label>
+          <label class="sim-ctrl sim-ctrl-tier-low" title="自動買入啟用時，每隔幾秒掃描一次備選清單，找出符合『進場條件』的個股下單。">
+            <span class="sim-ctrl-label">掃描間隔</span>
+            <input type="range" id="simCfgScanSec" min="1" max="60" step="1" value="2">
+            <b id="simCfgScanSecVal" class="sim-ctrl-val">2s</b>
+          </label>
+          <label class="sim-ctrl sim-ctrl-tier-med" title="交易時段控制（取代『僅 RTH』）：
+僅 RTH = 09:30–16:00 ET（最安全，spread 小）
+RTH + 盤前 = 04:00–16:00 ET（含盤前流動性，深度仍差）
+RTH + 盤後 = 09:30–20:00 ET（含盤後，財報後常見）
+全時段 = 04:00–20:00 ET（含盤前+盤後，最寬鬆）
+注意：盤前/盤後 spread 大、深度差，多數策略不適用。">
+            <span class="sim-ctrl-label">交易時段</span>
+            <select id="simCfgSessionMode" class="sim-select">
+              <option value="rth">僅 RTH</option>
+              <option value="rthPre">RTH + 盤前</option>
+              <option value="rthPost">RTH + 盤後</option>
+              <option value="all">全時段</option>
+            </select>
+            <b id="simCfgSessionModeVal" class="sim-ctrl-val">僅 RTH</b>
+          </label>
+          <label class="sim-ctrl sim-ctrl-tier-low" title="盤前/盤後 spread 大，券商常加收 0.05–0.1% 手續費。
+此處的 % 會在 entrySession 為 pre/post 時，加到買賣 feePct 上；RTH 不加。
+0 = 不加成（預設）。">
+            <span class="sim-ctrl-label">盤前/後手續費加成</span>
+            <input type="range" id="simCfgExtFee" min="0" max="50" step="1" value="0">
+            <b id="simCfgExtFeeVal" class="sim-ctrl-val">0.00%</b>
+          </label>
+          <label class="sim-ctrl sim-ctrl-tier-low" title="勝率計算（wr030 / wr050 / wr050d）是否只用盤中 K 棒。
+勾選後：避開盤前/盤後稀疏 bars 拉高或拉低命中率。
+不勾選（預設）：用全部 bars，行為與舊版一致。">
+            <span class="sim-ctrl-label">勝率只用盤中</span>
+            <input type="checkbox" class="sim-toggle" id="simCfgWrRthOnly">
+            <b id="simCfgWrRthOnlyVal" class="sim-ctrl-val">否</b>
+          </label>
+          <label class="sim-ctrl sim-ctrl-tier-med" title="成交判定模型：
+strict 保守（預設）：last 嚴格 &lt; limit 才視為成交，成交價 = limit；接近真實『對手單需穿越我方限價』。
+optimistic 樂觀：last ≤ limit 即成交，成交價 = last；用於快速回測，會高估勝率。">
+            <span class="sim-ctrl-label">成交模型</span>
+            <input type="checkbox" class="sim-toggle" id="simCfgFillMode">
+            <b id="simCfgFillModeVal" class="sim-ctrl-val">strict 保守</b>
+          </label>
+        </div>
+      </div>
+        </div><!-- /.sim-rule-groups -->
+      </div><!-- /.sim-rule -->
+    </div>
+    <div class="sim-body" id="simBody">
+      <table class="sim-table">
+        <thead>
+          <tr>
+            <th>狀態</th>
+            <th>標的</th>
+            <th>方向</th>
+            <th>買入時間</th>
+            <th class="num">掛單買</th>
+            <th class="num" title="下單股數 × 限價 = 下單金額。&#10;股數 = floor(設定金額 / 限價)；下單瞬間凍結對應 USD 額度，未成交 / 部分成交不退費 (由模擬器估算)。">股數 × 金額</th>
+            <th class="num" title="不追高參考進場價，從近 5 根 1m K 棒推算：&#10;・VWAP₅ = Σ(price × vol) / Σ(vol)&#10;・low₅  = min(L₁..L₅)&#10;・建議價 = (VWAP₅ + low₅) / 2&#10;&#10;・買入價 ≤ 建議價 → 標記為「達成建議價」(佳進場)&#10;・買入價 &gt; 建議價 → 可能追高，停利空間壓縮">建議價</th>
+            <th title="買入後到結算 / 目前為止，曾經跌到建議價或以下">達成建議價買入</th>
+            <th class="num">目標</th>
+            <th class="num">目標價</th>
+            <th class="num" title="停損價 = 買入價 × (1 - 停損%)；未成交時以限價估算">停損價</th>
+            <th class="num" title="進場當下勝率快照：+0.3% / +0.5% / -0.5%。越左越劣勢">進場快照</th>
+            <th class="num" title="MAE (Max Adverse Excursion)：買入後曾經跌到的最大跌幅 %。&#10;&#10;= min((Lₜ − 買入價) / 買入價 × 100%)，t ∈ [買入時, 結算 / 現在]&#10;&#10;・hover cell 可看 10 秒 / 30 秒 / 60 秒 不同視窗的 MAE 細節&#10;・MAE 過大 (例如 ≤ -0.5%) 代表此次進場時點不佳，後續同樣訊號可酅情提高 +0.5% 勝率門檻">MAE 最大跌幅</th>
+            <th class="num" title="移動停利 (Trailing Stop) 狀態：&#10;・未啟用 — 尚未到達啟動門檻 / 設定未開&#10;・等到達標 — 已到標但未達啟動門檻&#10;・鎖獲利中 — 顯示 peak ± 距觸發%，表示當前 peak、距離回吐觸發的緩衝&#10;&#10;觸發後若回吐超過 trailStop% → 立即出場 (不等持有時長)。">移動停利</th>
+            <th>結算時間</th>
+            <th class="num">結算價</th>
+            <th class="num" title="含手續費的淨損益。&#10;&#10;・買費 = 買進 USD 平盤費 + 買入金額 × 買進 %&#10;・賣費 = 賣價 × 股數 × 賣出 % + 賣出 USD 平盤費&#10;・淨損益 USD = (賣價 − 買入價) × 股數 − 買費 − 賣費&#10;・淨 % = 淨損益 USD / 下單金額 × 100%&#10;&#10;顯示為「USD / 淨 %」雙值，顏色按淨 % 正負。">淨損益</th>
+            <th title="離場原因：達標 / 停損 / 逾時 / 未成交 / 掛單中 / 持有中">離場原因</th>
+            <th class="num" title="成交到離場的所需時間；未成交顯示掛單存續時間">持有時間</th>
+            <th class="num" title="peak = 持有期間出現的「最高淨 %」(已扣手續費)。&#10;&#10;・到達 ≥ 目標% → 達標點亦高亮顯示&#10;・peak 與 MAE 兩端可看出此筆持有的最大波動區間 (peak − MAE)&#10;・若 peak 高但結算淨 % 低 → 表示「賣到沒下車」，可考慮啟用移動停利">最高淨%</th>
+          </tr>
+        </thead>
+        <tbody id="simTbody"></tbody>
+      </table>
+      <div class="sim-log-panel">
+        <div class="sim-log-head">
+          <span class="sim-log-title">🧾 試單日誌 <span class="sim-log-hint">最近 80 筆，含被規則阻擋的原因</span></span>
+          <button type="button" id="simLogClearBtn" class="ghost" title="清空試單日誌">清空</button>
+        </div>
+        <div id="simLogList" class="sim-log-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="catalogEditor" class="catalog-editor">
+    <div class="catalog-editor-head">
+      <span class="catalog-editor-title" title="快捷鍵：C 跳到此區（? 查看所有熱鍵）">備選清單編輯<span class="sec-hk" aria-hidden="true">C</span></span>
+      <span id="catalogStatus" class="cat-status"></span>
+    </div>
+    <form id="catalogAddForm" class="catalog-editor-add">
+      <input id="catalogAddInput" type="text" placeholder="輸入股票代碼，可以空白或逗號分隔多筆，例：NVDA TSLA SMH" autocomplete="off">
+      <button type="submit">新增</button>
+      <button type="button" id="catalogResetBtn" class="ghost" title="回到預設備選清單">回預設</button>
+      <button type="button" id="catalogClearBtn" class="ghost" title="清空所有備選代碼">全部清空</button>
+      <button type="button" id="catalogTsscoBtn" class="ghost" title="台新證券 美股手續費優惠名單（買進每筆 1 USD）一次性加入備選">TSSCO 手續費優惠批次加入</button>
+    </form>
+    <div class="catalog-editor-source">
+      <label class="src-label" for="catalogTsscoUrl">TSSCO 來源網址</label>
+      <input id="catalogTsscoUrl" type="url" placeholder="https://www.tssco.com.tw/trading-info" autocomplete="off">
+      <button type="button" id="catalogTsscoUrlReset" class="ghost" title="重設為預設網址">重設</button>
+    </div>
+    <div class="catalog-editor-section">
+      <div class="catalog-editor-section-title">個股（<span id="catCntStocks">0</span>）</div>
+      <div class="chip-grid editor-grid" data-edit-cat="stocks"></div>
+    </div>
+    <div class="catalog-editor-section">
+      <div class="catalog-editor-section-title">ETF（<span id="catCntEtfs">0</span>）</div>
+      <div class="chip-grid editor-grid" data-edit-cat="etfs"></div>
+    </div>
+  </section>
+
+  <footer>
+    <span class="disclaimer">
+      技術指標讀值僅供參考，不構成投資建議。短線建議以 MACD / RSI / 量能 / 動能綜合計分產生。
+    </span>
+  </footer>
+</div>
+
+<template id="cardTpl">
+  <div class="card" data-symbol="">
+    <div class="card-head">
+      <div class="sym-block">
+        <span class="sym">--</span>
+        <span class="name">--</span>
+      </div>
+      <div class="signal-stack">
+        <div class="signal signal-neutral" data-tf="短 1–5 分">
+          <div class="signal-top">— LOAD —</div>
+          <div class="signal-wr" title="當下進場，未來 10 分鐘內：&#10;· +0.5% 上漲勝率（取未來 K 棒最高漲幅）&#10;· -0.5% 下跌賠率（取未來 K 棒最低跌幅）&#10;以最近 20 根 1m K 棒為樣本。">
+            <span class="wr-mini wr-up">+0.3%: <b class="wr-v-030">--</b><i class="wr-px wr-px-030">--</i></span>
+            <span class="wr-mini wr-up">+0.5%: <b class="wr-v-050">--</b><i class="wr-px wr-px-050">--</i></span>
+            <span class="wr-mini wr-down">-0.5%: <b class="wr-v-050d">--</b><i class="wr-px wr-px-050d">--</i></span>
+            <button type="button" class="ws-test-btn ws-test-off">📡 WS</button>
+          </div>
+        </div>
+        <div class="signal-swing signal-neutral" data-tf="波段 15–60 分">— 資料 —</div>
+      </div>
+    </div>
+
+    <div class="card-price">
+      <span class="price">--</span>
+      <span class="change">--</span>
+      <span class="suggest-buy" title="以近 5 根 1m 的 VWAP / 低點估算的「不追高」參考進場價">建議購買價格:--</span>
+      <span class="reason">--</span>
+    </div>
+
+    <div class="news">
+      <div class="news-counts">
+        <span class="news-pos news-hover">
+          ▲ <span class="np">0</span>
+          <div class="news-popover pos-pop"></div>
+        </span>
+        <span class="news-neg news-hover">
+          ▼ <span class="nn">0</span>
+          <div class="news-popover neg-pop"></div>
+        </span>
+        <span class="news-neu news-hover">
+          ▬ <span class="nu">0</span>
+          <div class="news-popover neu-pop"></div>
+        </span>
+        <span class="news-headline" title="">—</span>
+      </div>
+    </div>
+
+    <div class="advice advice-hold"><span class="advice-tag">建議</span><span class="advice-text">--</span></div>
+    <div class="tp-sl" style="display:none"></div>
+
+    <div class="chart-section">
+      <div class="chart-label"><span class="spark-label">K 線走勢</span></div>
+      <canvas class="spark" width="480" height="100"></canvas>
+    </div>
+
+    <div class="chart-section">
+      <div class="chart-label"><span class="macd-label" title="MACD (12 / 26 / 9) — Gerald Appel 經典預設參數&#10;&#10;・12 = 快線 EMA 週期（較短期均線，反應近期價格）&#10;・26 = 慢線 EMA 週期（較長期均線，代表中期趨勢）&#10;・9  = Signal 線 EMA 週期（對 MACD 再做平滑）&#10;&#10;計算公式：&#10;・MACD (DIF) = EMA12(收盤) − EMA26(收盤)&#10;・Signal     = EMA9(MACD)&#10;・Histogram  = MACD − Signal&#10;&#10;「週期」單位 = 1 根 K 棒，依現在選用的時間框架而定。&#10;例如 30 分線：12 = 6 小時、5 分線：12 = 1 小時。">MACD (12 / 26 / 9)</span>　<span class="macd-inline">--</span></div>
+      <canvas class="macd" width="480" height="90"></canvas>
+    </div>
+
+    <div class="metrics">
+      <div title="MACD 直方圖 = MACD − Signal（12/26/9）。&#10;以最新 1 分鐘 K 線計算。&#10;&gt; 0：動能偏多，柱體越長越強；&#10;&lt; 0：動能偏空，由正轉負常見為短線轉折訊號。"><span class="lbl">MACD-H</span><span class="val macdH">--</span></div>
+      <div title="相對強弱指數 RSI(14)，以最新 1 分鐘 K 線計算。&#10;&gt; 70：超買，可能拉回；&#10;&lt; 30：超賣，可能反彈；&#10;50 為多空分水嶺。"><span class="lbl">RSI(14)</span><span class="val rsi">--</span></div>
+      <div title="量比 = 最新 1 分鐘成交量 ÷ 近 60 根 1 分均量。&#10;&gt; 1：放量（&gt; 2 視為明顯爆量）；&#10;&lt; 1：縮量。&#10;搭配方向判斷追價或觀望。"><span class="lbl">量/均量</span><span class="val volRatio">--</span></div>
+      <div title="今日盤中最高 / 最低成交價（來自日線快照）。&#10;用來看當日波動區間與目前價在區間內的位置，&#10;判斷是否接近高點壓力 / 低點支撐。"><span class="lbl">高/低</span><span class="val range">--</span></div>
+      <div title="當沖流動性評級，依日均量與今日成交金額估算：&#10;高：滑價低、進出容易；&#10;中：可操作但留意盤口；&#10;低：滑價大、盤前盤後易跳價，不建議當沖。"><span class="lbl">流動性</span><span class="val liq-badge liq-high">流動: --</span></div>
+    </div>
+    <div class="liquidity-warn" style="display:none"></div>
+
+    <div class="extended" style="display:none"></div>
+    <div class="ohl-row">
+      <div class="ohl-block ohl-today">
+        <span class="ohl-tag">今日</span>
+        <div class="ohl-grid ohl-grid-3">
+          <div class="ohl-cell"><span class="ohl-lbl">開</span><span class="val ohl-todayO">--</span><span class="ohl-pct"></span></div>
+          <div class="ohl-cell ohl-hi"><span class="ohl-lbl">高</span><span class="val ohl-todayH">--</span><span class="ohl-pct"></span></div>
+          <div class="ohl-cell ohl-lo"><span class="ohl-lbl">低</span><span class="val ohl-todayL">--</span><span class="ohl-pct"></span></div>
+        </div>
+      </div>
+      <div class="ohl-block ohl-prev">
+        <span class="ohl-tag ohl-tag-prev">昨日</span>
+        <div class="ohl-grid ohl-grid-4">
+          <div class="ohl-cell"><span class="ohl-lbl">開</span><span class="val ohl-prevO">--</span><span class="ohl-pct"></span></div>
+          <div class="ohl-cell ohl-hi"><span class="ohl-lbl">高</span><span class="val ohl-prevH">--</span><span class="ohl-pct"></span></div>
+          <div class="ohl-cell ohl-lo"><span class="ohl-lbl">低</span><span class="val ohl-prevL">--</span><span class="ohl-pct"></span></div>
+          <div class="ohl-cell"><span class="ohl-lbl">收</span><span class="val ohl-prevC">--</span><span class="ohl-pct"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script src="tradingClient.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>

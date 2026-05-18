@@ -1,0 +1,16 @@
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\bin\TechAnalysisAPI_Sample.exe.config
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\bin\TechAnalysisAPI_Sample.exe
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\bin\TechAnalysisAPI_Sample.pdb
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\obj\Release\TechAnalysisAPI_Sample.csproj.AssemblyReference.cache
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\obj\Release\MainWindow.g.cs
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\obj\Release\App.g.cs
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\obj\Release\TechAnalysisAPI_Sample_MarkupCompile.cache
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\obj\Release\TechAnalysisAPI_Sample_MarkupCompile.lref
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\obj\Release\MainWindow.baml
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\obj\Release\TechAnalysisAPI_Sample.g.resources
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\obj\Release\TechAnalysisAPI_Sample.Properties.Resources.resources
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\obj\Release\TechAnalysisAPI_Sample.csproj.GenerateResource.cache
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\obj\Release\TechAnalysisAPI_Sample.csproj.CoreCompileInputs.cache
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\obj\Release\TechAnal.C4910EA4.Up2Date
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\obj\Release\TechAnalysisAPI_Sample.exe
+C:\Temp\Case\shortterm-stock-dashboard\TechAnalysisAPI_Sample\obj\Release\TechAnalysisAPI_Sample.pdb
