@@ -80,9 +80,9 @@ const PRESETS_THR = {
 };
 // v.22 每個 preset 對應的 simCfg auto-buy 預設值（點 preset 按鈕時同步套用，保留用戶其他客製）
 const PRESETS_SIMCFG = {
-  conservative: { requireBreakout: true,  preMarketBuyMode: 'disabled',     wrMin: 0.70, wrMin050: 0.35, wrMax050d: 0.10, gradientLevel: 3 },
-  standard:     { requireBreakout: false, preMarketBuyMode: 'breakoutOnly', wrMin: 0.60, wrMin050: 0.30, wrMax050d: 0.15, gradientLevel: 3 },
-  aggressive:   { requireBreakout: false, preMarketBuyMode: 'normal',       wrMin: 0.50, wrMin050: 0.20, wrMax050d: 0.25, gradientLevel: 1 },
+  conservative: { requireBreakout: true,  preMarketBuyMode: 'disabled',     wrMin: 0.70, wrMin050: 0.35, wrMax050d: 0.10, gradientLevel: 3, requireHistTurnUp: true,  minVolBurstAuto: 2.5, rsiMaxAuto: 70 },
+  standard:     { requireBreakout: false, preMarketBuyMode: 'breakoutOnly', wrMin: 0.60, wrMin050: 0.30, wrMax050d: 0.15, gradientLevel: 3, requireHistTurnUp: true,  minVolBurstAuto: 2.0, rsiMaxAuto: 75 },
+  aggressive:   { requireBreakout: false, preMarketBuyMode: 'normal',       wrMin: 0.50, wrMin050: 0.20, wrMax050d: 0.25, gradientLevel: 1, requireHistTurnUp: false, minVolBurstAuto: 0,   rsiMaxAuto: 0  },
 };
 const THR_KEY = "dash_thresholds_v1";
 const THR_PRESET_KEY = "dash_threshold_preset_v1";       // 目前選用的 preset
@@ -6323,7 +6323,9 @@ function bindThresholdPanel() {
       if (Number.isFinite(v)) {
         simCfg[k] = (k === "wrMin" || k === "wrMin050" || k === "wrMax050d") ? v / 100 : v;
         const out = panel.querySelector(`[data-sim-out="${k}"]`);
-        if (out) out.textContent = `${v}%`;
+        if (out) out.textContent = (k === "minVolBurstAuto") ? (v > 0 ? `×${v.toFixed(1)}` : "關")
+                                  : (k === "rsiMaxAuto")     ? (v > 0 ? String(v) : "關")
+                                  : `${v}%`;
       }
     }
     try { if (typeof saveSimCfg === "function") saveSimCfg(); } catch {}
@@ -6334,8 +6336,11 @@ function bindThresholdPanel() {
     if (!(inp instanceof HTMLInputElement) || !inp.dataset.sim || inp.type !== "range") return;
     const v = parseFloat(inp.value);
     if (Number.isFinite(v)) {
-      const out = panel.querySelector(`[data-sim-out="${inp.dataset.sim}"]`);
-      if (out) out.textContent = `${v}%`;
+      const k = inp.dataset.sim;
+      const out = panel.querySelector(`[data-sim-out="${k}"]`);
+      if (out) out.textContent = (k === "minVolBurstAuto") ? (v > 0 ? `×${v.toFixed(1)}` : "關")
+                                : (k === "rsiMaxAuto")     ? (v > 0 ? String(v) : "關")
+                                : `${v}%`;
     }
   });
 }
@@ -6368,7 +6373,9 @@ function renderThresholdPanel() {
         if (Number.isFinite(pct)) {
           el.value = String(pct);
           const out = panel.querySelector(`[data-sim-out="${k}"]`);
-          if (out) out.textContent = `${pct}%`;
+          if (out) out.textContent = (k === "minVolBurstAuto") ? (pct > 0 ? `×${(+pct).toFixed(1)}` : "關")
+                                    : (k === "rsiMaxAuto")     ? (pct > 0 ? String(pct) : "關")
+                                    : `${pct}%`;
         }
       }
     });
@@ -6471,6 +6478,13 @@ const SIM_DEFAULT_CFG = {
   requireBreakout: false,
   preMarketBuyMode: 'breakoutOnly',
   chasedGuardAtrMul: 0.8,
+  // v.25 起漲點品質過濾（避免假信號）：
+  //   requireHistTurnUp: true → 只買 MACD-H 剛由負轉正的個股（動能初始點）
+  //   minVolBurstAuto: 0=關閉 / >0 個股量比（vol vs 20均量）需 ≥ 此值（狂漲顯量確認）
+  //   rsiMaxAuto: 0=關閉 / >0 RSI(14) > 此值拒絕（避免追在已狂漲過熱的頂部）
+  requireHistTurnUp: true,
+  minVolBurstAuto: 2.0,
+  rsiMaxAuto: 75,
   // 執行模式：0 = 本地模擬（1 = WS 實交
   executionMode: 0,
   wsUrl: "ws://127.0.0.1:1088/",
@@ -6481,7 +6495,8 @@ const SIM_DEFAULT_CFG = {
   // v4 (2026-05-19): maxEntrySlipPct→0.005（追價成交遠離下單時市價時取消，避免追高）
   // v5 (2026-05-19): 新增 requireBreakout / preMarketBuyMode='breakoutOnly' / chasedGuardAtrMul=0.8
   // v6 (2026-05-19): 新增 wrMax050d=0.15（-0.5% 賠率上限保護）
-  cfgMigV: 6,
+  // v7 (2026-05-19): 新增起漲點品質過濾 requireHistTurnUp=true / minVolBurstAuto=2.0 / rsiMaxAuto=75
+  cfgMigV: 7,
 };
 let simTrades = [];
 let simCfg = { ...SIM_DEFAULT_CFG };
@@ -6557,6 +6572,12 @@ function loadSimTrades() {
             simCfg.requireBreakout = false;
             simCfg.preMarketBuyMode = 'breakoutOnly';
             simCfg.chasedGuardAtrMul = 0.8;
+          }
+          // v7: 起漲點品質過濾預設值（-0.5% 賠率上限 wrMax050d 在 v6 已在 spread 中）
+          if (_curMigV < 7) {
+            simCfg.requireHistTurnUp = true;
+            simCfg.minVolBurstAuto = 2.0;
+            simCfg.rsiMaxAuto = 75;
           }
           simCfg.cfgMigV = _newMigV;
           // 在 loadSimTrades 完成後的 setTimeout 不來得及，下一次 saveSimCfg 會寫回。為穩鬼主動寫回。
@@ -8982,6 +9003,13 @@ async function runSimAutoScan(force) {
     if ((openBySym.get(r.sym) || 0) >= perSymMax) return false;
     // v.21：起漲點過濾
     const brk = r.brk;
+    // v.25 起漲品質確認（避免假信號 / 沒力道的低量反彈）
+    // d1) MACD-H 必翸正：只買動能初始點，避免個股適中達的偽突破（retest 仍允許）
+    if (simCfg.requireHistTurnUp && !(brk && (brk.histTurnUp || brk.retest))) return false;
+    // d2) 量比下限：狂漲顯量確認，避免低量裝子假突破
+    if ((+simCfg.minVolBurstAuto || 0) > 0 && !(brk && brk.volRatio >= simCfg.minVolBurstAuto)) return false;
+    // d3) RSI 上限：避免追在已狂漲過熱的頂部
+    if ((+simCfg.rsiMaxAuto || 0) > 0 && typeof r.rsi5 === "number" && r.rsi5 > simCfg.rsiMaxAuto) return false;
     // a) 盤前/後模式
     const pmMode = simCfg.preMarketBuyMode || 'normal';
     if (pmMode !== 'normal' && typeof _usSessionOfTs === 'function') {

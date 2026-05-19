@@ -185,6 +185,17 @@
           <input type="range" data-sim="wrMin" min="30" max="95" step="1">
           <output data-sim-out="wrMin"></output>
         </label>
+        <label class="threshold-row"><span title="MACD-H 必翻紅：開啟後 auto-buy 只接受 brk.histTurnUp（MACD 柱由負轉正第一根，動能初始點）或 retest（回測不破）候選。&#10;&#10;用途：過濾「個股回到當下但 MACD 仍向下」的假信號，避免買在沒力的反彈。&#10;&#10;預設：保守=開、標準=開、激進=關">MACD-H 必翻紅</span>
+          <input type="checkbox" data-sim="requireHistTurnUp">
+        </label>
+        <label class="threshold-row"><span title="量比下限 (×N)：候選的 brk.volRatio（當下 vol ÷ 前 20 根均量）必須 ≥ 此倍數。&#10;&#10;用途：狂漲點必有量。避免「低量裝子假突破」。比 THR.brkVolMul 更嚴格 — 此為 auto-buy 二次過濾。&#10;&#10;預設：保守 ×2.5、標準 ×2.0、激進 關閉。設 0 = 不過濾。">量比下限 (×N)</span>
+          <input type="range" data-sim="minVolBurstAuto" min="0" max="6" step="0.1">
+          <output data-sim-out="minVolBurstAuto"></output>
+        </label>
+        <label class="threshold-row"><span title="RSI(14) 上限：個股 5m RSI > 此值即拒絕（已狂漲過熱，買在頂部）。&#10;&#10;用途：避免追在 RSI 80+ 的尾盤。配合「量比下限」過濾出「量大但未過熱」的真起漲點。&#10;&#10;預設：保守 70、標準 75、激進 關閉。設 0 = 不過濾。">RSI 上限</span>
+          <input type="range" data-sim="rsiMaxAuto" min="0" max="95" step="1">
+          <output data-sim-out="rsiMaxAuto"></output>
+        </label>
       </div>
     </div>
     <div class="settings-actions">
