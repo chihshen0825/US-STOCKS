@@ -8205,6 +8205,8 @@ function bindSimControls() {
   const cms  = document.getElementById("simCfgChaseMaxSec");
   const cpg  = document.getElementById("simCfgChasePanicPct");
   const cpm  = document.getElementById("simCfgChasePanicMul");
+  const mbc  = document.getElementById("simCfgMaxBumpCount");
+  const mes  = document.getElementById("simCfgMaxSlipPct");
   const xem  = document.getElementById("simCfgExitMode");
   const xcbs = document.getElementById("simCfgExitChaseBumpSec");
   const xcbp = document.getElementById("simCfgExitChaseBumpPct");
@@ -8242,6 +8244,8 @@ function bindSimControls() {
   const cmsV  = document.getElementById("simCfgChaseMaxSecVal");
   const cpgV  = document.getElementById("simCfgChasePanicPctVal");
   const cpmV  = document.getElementById("simCfgChasePanicMulVal");
+  const mbcV  = document.getElementById("simCfgMaxBumpCountVal");
+  const mesV  = document.getElementById("simCfgMaxSlipPctVal");
   const xemV  = document.getElementById("simCfgExitModeVal");
   const xcbsV = document.getElementById("simCfgExitChaseBumpSecVal");
   const xcbpV = document.getElementById("simCfgExitChaseBumpPctVal");
@@ -8281,6 +8285,8 @@ if (sh)   sh.value   = String(simCfg.amountPerTradeUsd);
   if (cbs)  cbs.value  = String(simCfg.chaseBumpSec);
   if (cbp)  cbp.value  = String(simCfg.chaseBumpPct);
   if (cms)  cms.value  = String(simCfg.chaseMaxSec);
+  if (mbc)  mbc.value  = String(Math.max(0, Math.min(30, +simCfg.maxBumpCount | 0)));
+  if (mes)  mes.value  = String(Math.round((+simCfg.maxEntrySlipPct || 0) * 10000));
   if (xem)  xem.checked = ((simCfg.exitMode | 0) === 1);
   if (xcbs) xcbs.value = String(simCfg.exitChaseBumpSec);
   if (xcbp) xcbp.value = String(simCfg.exitChaseBumpPct);
@@ -8443,6 +8449,15 @@ if (sh)   sh.value   = String(simCfg.amountPerTradeUsd);
     simCfg.chasePanicMul = Math.max(1, Math.min(50, +cpm.value | 0 || 10));
     _renderSimCfgLabels(); saveSimCfg();
   });
+  mbc?.addEventListener("input", () => {
+    simCfg.maxBumpCount = Math.max(0, Math.min(30, +mbc.value | 0));
+    _renderSimCfgLabels(); saveSimCfg();
+  });
+  mes?.addEventListener("input", () => {
+    // slider 0~100 → 0~1.00%（每格 0.05% = step 5）
+    simCfg.maxEntrySlipPct = Math.max(0, Math.min(0.01, (+mes.value || 0) / 10000));
+    _renderSimCfgLabels(); saveSimCfg();
+  });
   xem?.addEventListener("change", () => {
     simCfg.exitMode = xem.checked ? 1 : 0;
     _renderSimCfgLabels(); saveSimCfg();
@@ -8534,7 +8549,7 @@ if (sh)   sh.value   = String(simCfg.amountPerTradeUsd);
   // ===== 分組「↶ 預設」按鈕：只重設該類別的欄位 =====
   const GROUP_KEYS = {
     entry:    ["concurrency", "targetPct", "trailingStopPct", "windowMs", "wrMin", "wrMin050", "wrMax050d", "perSymMax", "gradientLevel"],
-    strategy: ["entryMode", "chaseBumpSec", "chaseBumpPct", "chaseMaxSec", "chasePanicGapPct", "chasePanicMul"],
+    strategy: ["entryMode", "chaseBumpSec", "chaseBumpPct", "chaseMaxSec", "chasePanicGapPct", "chasePanicMul", "maxBumpCount", "maxEntrySlipPct"],
     exit:     ["exitMode", "exitChaseBumpSec", "exitChaseBumpPct", "exitChasePanicGapPct", "exitChasePanicMul"],
     risk:     ["amountPerTradeUsd", "feeBuyUsd", "feeBuyPct", "feeSellPct", "feeSellUsd", "stopLossPct", "dailyMaxLossUsd", "minPriceUsd", "maxFeePctOfAmount", "fxUsdTwd"],
     exec:     ["executionMode", "sessionMode", "wrRthOnly", "extendedFeePct", "fillMode", "scanIntervalSec"],
@@ -8572,6 +8587,8 @@ if (sh)   sh.value   = String(simCfg.amountPerTradeUsd);
     if (cms)  cms.value  = String(simCfg.chaseMaxSec);
     if (cpg)  cpg.value  = String(simCfg.chasePanicGapPct);
     if (cpm)  cpm.value  = String(simCfg.chasePanicMul);
+    if (mbc)  mbc.value  = String(Math.max(0, Math.min(30, +simCfg.maxBumpCount | 0)));
+    if (mes)  mes.value  = String(Math.round((+simCfg.maxEntrySlipPct || 0) * 10000));
     if (xem)  xem.checked = ((simCfg.exitMode | 0) === 1);
     if (xcbs) xcbs.value = String(simCfg.exitChaseBumpSec);
     if (xcbp) xcbp.value = String(simCfg.exitChaseBumpPct);
@@ -8876,6 +8893,20 @@ if (sh)   sh.value   = String(simCfg.amountPerTradeUsd);
         : num(v.toFixed(2), "v-num") + unit("%");
     }
     if (cpmV)  cpmV.innerHTML = num("×" + (simCfg.chasePanicMul | 0), "v-num");
+    if (mbcV) {
+      const n = Math.max(0, Math.min(30, +simCfg.maxBumpCount | 0));
+      // 0 = 關閉（無上限，警告）；1-3 嚴格（綠）；4-7 一般；8+ 寬鬆（警告）
+      mbcV.innerHTML = (n === 0)
+        ? pill("關閉", "v-bad")
+        : num(n, n <= 3 ? "v-ok" : (n >= 8 ? "v-warn" : "v-num")) + unit("次");
+    }
+    if (mesV) {
+      const p = (+simCfg.maxEntrySlipPct || 0) * 100; // %
+      // 0 = 關閉（無上限，警告）；≤0.3% 嚴格（綠）；≤0.5% 一般；>0.5% 寬鬆（warn）
+      mesV.innerHTML = (p === 0)
+        ? pill("關閉", "v-bad")
+        : num(p.toFixed(2), p <= 0.30 ? "v-ok" : (p > 0.5 ? "v-warn" : "v-num")) + unit("%");
+    }
     if (xemV)  {
       const m = (+simCfg.exitMode | 0);
       xemV.innerHTML = (m === 0)

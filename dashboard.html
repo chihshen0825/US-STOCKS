@@ -453,6 +453,16 @@
             <input type="range" id="simCfgChasePanicMul" min="1" max="50" step="1" value="10">
             <b id="simCfgChasePanicMulVal" class="sim-ctrl-val">×10</b>
           </label>
+          <label class="sim-ctrl sim-chase-only sim-ctrl-tier-high" title="追價次數上限：限價單被市價推升後加價（bump）的累計次數達此值 → 立即取消下單（unfilled）。&#10;&#10;用途：避免「追到爆」— 實測 bumpCount 10+ 的單常買在當下波段高點，0.4% target 撐不過追價滑點。&#10;&#10;預設 5；設 0 = 關閉（不限追價次數）。範圍 0 ~ 30。">
+            <span class="sim-ctrl-label">追價次數上限</span>
+            <input type="range" id="simCfgMaxBumpCount" min="0" max="30" step="1" value="5">
+            <b id="simCfgMaxBumpCountVal" class="sim-ctrl-val">5 次</b>
+          </label>
+          <label class="sim-ctrl sim-chase-only sim-ctrl-tier-high" title="進場滑價上限 (%)：實際成交價相對下單時市價（placedPrice）的不利偏移超過此值 → 取消成交（unfilled）。&#10;&#10;用途：第二道防線 — 即使追價未達次數上限，若最終成交價已嚴重偏離下單時點（勝率基準），也拒收。&#10;&#10;預設 0.50%；建議 ≤ targetPct 的一半。設 0 = 關閉。範圍 0 ~ 1%，每格 0.05%。">
+            <span class="sim-ctrl-label">進場滑價上限</span>
+            <input type="range" id="simCfgMaxSlipPct" min="0" max="100" step="5" value="50">
+            <b id="simCfgMaxSlipPctVal" class="sim-ctrl-val">0.50%</b>
+          </label>
         </div>
       </div>
 
