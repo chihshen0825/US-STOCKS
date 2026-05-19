@@ -323,7 +323,7 @@ function marketAvgPct() {
   return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
 const heavyCache = new Map();
-let wlSortKey = "score1"; let wlSortDesc = true;
+let wlSortKey = "sym"; let wlSortDesc = false;
 const wlData = new Map();
 // 釘選的股票代碼（依目前順序排列），會永遠顯示在備選清單最上方，不受排序影響。
 // 透過列首的 📌 圖示切換，並可在釘選區內部以拖拉重新排序。
