@@ -3337,11 +3337,28 @@ async function computeWatchlistRow(sym, name) {
     }
   }
   // 52w 位階 %（(price - low)/(high - low)*100）：越大越接近年高，越小越接近年低。
+  // 夾在 0~100；保留 raw 在 pos52wRaw（>100 = 突破 52w 高、<0 = 跌破 52w 低，多半代表 stale quote）。
   if (price != null && row.fwHigh && row.fwLow && row.fwHigh > row.fwLow) {
-    row.pos52w = +(((price - row.fwLow) / (row.fwHigh - row.fwLow)) * 100).toFixed(1);
+    const _raw = ((price - row.fwLow) / (row.fwHigh - row.fwLow)) * 100;
+    row.pos52wRaw = +_raw.toFixed(1);
+    row.pos52w = +Math.max(0, Math.min(100, _raw)).toFixed(1);
   } else {
-    row.pos52w = null;
+    row.pos52w = null; row.pos52wRaw = null;
   }
+  // 同步盤前% 的基準到 chgPct 使用的 prev，避免兩欄因 derivedPre 內部用了不同 fallback 而差 0.05~0.1%。
+  // 註：盤後 (post) 改變率本就以「regular close」為基準，與盤前語意不同，不重算。
+  if (prev && row.pre && typeof row.pre.price === "number") {
+    const _p = row.pre.price;
+    row.pre = { ...row.pre, change: _p - prev, changePct: ((_p - prev) / prev) * 100 };
+  }
+  // Stale quote 偵測：日漲跌絕對值 > 8% 但近 5 分鐘最大波動 < 0.5%（沒有對應的分時 bar 支撐），
+  // 或 52w 位階 raw 超出 [-5, 105]（突破年高/低又無波動配合）→ 標 staleSuspect，UI 顯示 ⚠。
+  const _m5Up = typeof row.mom5Pct === "number" ? row.mom5Pct : 0;
+  const _m5Dn = typeof row.mom5DownPct === "number" ? row.mom5DownPct : 0;
+  const _bigChg = typeof row.chgPct === "number" && Math.abs(row.chgPct) > 8;
+  const _flatBars = Math.abs(_m5Up) < 0.5 && Math.abs(_m5Dn) < 0.5;
+  const _outOf52w = row.pos52wRaw != null && (row.pos52wRaw > 105 || row.pos52wRaw < -5);
+  if ((_bigChg && _flatBars) || _outOf52w) row.staleSuspect = true;
   // 勝率：優先 1m（K=10 ≈ 10 分鐘）；盤前/早盤 1m bar 不足時 fallback 用 5m（K=2 ≈ 10 分鐘）
   // 5m fallback：K=3 根 ≈ 真 15 分鐘；WIN=12 對應近 ±60 分鐘。
   // （原本 WIN=40 跳回三天前，記憶太長、隻 wr 變楫家，兩見偏 0% / 100%。）
@@ -4242,7 +4259,7 @@ function renderWatchlist() {
     tr.innerHTML =
       `<td class="sym">${_pinBtn}${r.sym}</td>` +
       `<td class="name">${msBadge}${r.name}</td>` +
-      `<td class="num">${fmt(r.price, 2)}${r.pos52w != null ? `<sup class="pos52w ${r.pos52w >= 80 ? "pos52w-high" : r.pos52w <= 20 ? "pos52w-low" : ""}" title="52 週位階：${r.pos52w.toFixed(1)}%【低 ${r.fwLow?.toFixed(2)} ↔ 高 ${r.fwHigh?.toFixed(2)}】&#10;≥ 80% 接近年高（追高風險）；≤ 20% 接近年低（反彈候選）">${Math.round(r.pos52w)}%</sup>` : ""}</td>` +
+      `<td class="num">${fmt(r.price, 2)}${r.pos52w != null ? `<sup class="pos52w ${r.pos52w >= 80 ? "pos52w-high" : r.pos52w <= 20 ? "pos52w-low" : ""}" title="52 週位階：${(r.pos52wRaw ?? r.pos52w).toFixed(1)}%${r.pos52wRaw != null && r.pos52wRaw > 100 ? "（突破 52w 高 " + (r.pos52wRaw - 100).toFixed(1) + "%，可能 stale quote）" : r.pos52wRaw != null && r.pos52wRaw < 0 ? "（跌破 52w 低 " + Math.abs(r.pos52wRaw).toFixed(1) + "%，可能 stale quote）" : ""}【低 ${r.fwLow?.toFixed(2)} ↔ 高 ${r.fwHigh?.toFixed(2)}】&#10;≥ 80% 接近年高（追高風險）；≤ 20% 接近年低（反彈候選）">${Math.round(r.pos52w)}%</sup>` : ""}${r.staleSuspect ? `<sup class="stale-warn" title="資料疑異常：日漲跌過大但分時無對應波動、或 52w 位階超出 0~100，可能 stale quote / 拆股未更新">⚠</sup>` : ""}</td>` +
       `<td class="num ${chgCls}">${r.chgPct == null ? "--" : sign + r.chgPct.toFixed(2) + "%"}</td>` +
       ppCell(r.pre) +
       ppCell(r.post) +
@@ -6978,7 +6995,21 @@ function expireOldSimTrades() {
     if (t.status === "pending" && now - (t.placedTime || now) >= pendingLimit) {
       t.status = "unfilled"; t.exitTime = now; changed = true;
     } else if (t.status === "open" && now - t.buyTime >= t.windowMs) {
-      t.status = "loss"; t.exitTime = now; t.exitPrice = t.exitPrice ?? null; changed = true;
+      // 逾時平倉：以「最近看到的市價」為出場價並補齊 PnL 欄位，
+      // 避免 settle 沒跑到（symbol 卡片消失 / intra 抓取失敗）就只寫了空 exitPrice。
+      const exitPx = isFinite(t.lastPrice) ? t.lastPrice : t.buyPrice;
+      const np = _netPnl(t, exitPx);
+      t.status = "loss";
+      t.exitTime = now;
+      t.exitReason = t.exitReason || "timeout";
+      t.exitPrice = exitPx;
+      if (np) {
+        t.grossPnl = np.gross;
+        t.feePaid  = np.fee;
+        t.netPnl   = np.net;
+        if (t.peakPct == null || t.peakPct < np.netPct) t.peakPct = np.netPct;
+      }
+      changed = true;
     }
   }
   if (changed) { saveSimTrades(); renderSimPanel(); }
