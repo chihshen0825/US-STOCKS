@@ -6603,7 +6603,7 @@ const SIM_DEFAULT_CFG = {
   entryMode: 4,          // 買入價格策略：0=目前價 1=中間值 2=建議價 3=追價(起始=建議價) 4=追價(起始=中間值，預設) 5=追價(起始=目前價)
   // 追價模式 (mode 3) 參數：起始為建議價（無則目前價），每 chaseBumpSec 秒未成交就加價，上限為當下市價；總時限 chaseMaxSec 仍未成交則刪單(unfilled)
   chaseBumpSec: 0.1,     // 0.01-60 加價間隔（秒）
-  chaseBumpPct: 0.01,    // 0.01-25 每次加價幅度，% of 下單時市價
+  chaseBumpPct: 0.05,    // 0.01-25 每次加價幅度，% of 下單時市價（v.45 0.01→0.05：實測 0.01 步幅追不上 AMD 等飆股 0.4%/min 漲速）
   chaseMaxSec: 120,      // 10-1000 追價總時限（秒）
   // ===== 出場策略：對應的「賣出追價」（殺低賣出） =====
   exitMode: 1,           // 0=市價立刻成交、1=追價（起始=當下市價，每 N 秒 -step%，慢慢殺低吃對手 bid）
@@ -6613,7 +6613,7 @@ const SIM_DEFAULT_CFG = {
   exitChasePanicGapPct: 0.5,  // 0=關閉；「sellLimit vs 市價」下方價差達 X% 視為狂跌，跳過 bump 節流並拿 step × mul
   exitChasePanicMul: 10,      // 1-50 狂跌時的步幅倍數（另會保證限價跳到「市價 - 1 tick」以下）
   // ===== 買進追價：狂飄加速追擊——股價頻跳時動態放大追價步幅 =====
-  chasePanicGapPct: 0.5,   // 0=關閉；「市價 vs 限價」價差達 X% 視為狂飄，跳過 bump 節流並拿 step × mul
+  chasePanicGapPct: 0.3,   // 0=關閉；「市價 vs 限價」價差達 X% 視為狂飄，跳過 bump 節流並拿 step × mul（v.45 0.5→0.3：0.5% 才觸發太晚，常追在 target 已耗 60% 的峰位）
   chasePanicMul: 10,       // 1-50 狂飄時的步幅倒數倍數（另會保證限價跳到「市價 + 1 tick」以上）
   // ===== 美股手續費 / 風控 / 成交模型 =====
   amountPerTradeUsd: 3500,  // 每筆下單金額（USD），股數 = floor(金額 / 限價)；每 500 一個級距
@@ -6637,8 +6637,12 @@ const SIM_DEFAULT_CFG = {
   // v.32 預設 0.005 (=0.5%)；0 = 關閉護欄。開盤跳空時 0.2% 太緊全擋掉。建議 ≤ targetPct，避免追價滑點吃光獲利空間。
   maxEntrySlipPct: 0.005,
   // v.27 追價次數上限：bumpCount ≥ 此值 → 取消下單（避免限價單一路追到當下波段高點再成交）。
-  // 預設 5；0 = 關閉。實測 bumpCount 10+ 的單常買在峰頂，targetPct 0.4% 撐不過追價滑點。
-  maxBumpCount: 5,
+  // 預設 8（v.45 5→8）；0 = 關閉。5 太嚴常連基本追價都沒完成就砍單；12+ 過寬會吃掉 60% 目標獲利空間。
+  maxBumpCount: 8,
+  // v.45 同 sym unfilled 冷卻（秒）：上一筆同 sym 標記 unfilled 後，須等過此秒數才允許再下新單。
+  // 用途：AMD 飆漲時連續 13 筆 unfilled，每 6-10 秒就重丟一張，全部失敗。冷卻可避免燒掉追價步數重複追同個飆股。
+  // 預設 120；0 = 關閉。
+  unfilledCooldownSec: 120,
   // 勝率計算只取 RTH bars。預設 true：避免盤前/後稀疏 bar 把 wr 算高/低。
   wrRthOnly: true,
   // v.21 起漲點過濾：
@@ -6675,7 +6679,8 @@ const SIM_DEFAULT_CFG = {
   // v9 (2026-05-19): 根據實戰的 6 筆賠損分析收緊 preset 預設 —— targetPct 0.4%→0.6%、標準 preset wrMin 60%→65% / wrMax050d 15%→10%
   // v10 (2026-05-19): 開盤實測 v9 太緊全擋掉（wr 50-60% 區段被刷掉、開盤跳空 0.2% slip 也被擋）—— 回 wrMin 65%→60%、maxEntrySlipPct 0.002→0.005
   // v11 (2026-05-19): 新預設組（依用戶實戰調整）—— targetPct 0.006→0.004、wrMin050 0.30→0.60、gradientLevel 3→1；standard preset 同步：wrMin050 0.35→0.60、wrMax050d 0.10→0.15、gradientLevel 3→1
-  cfgMigV: 11,
+  // v12 (2026-05-20): 追價可達性收緊 —— chaseBumpPct 0.01→0.05（步幅 ×5 追得上飆股）、chasePanicGapPct 0.5→0.3（狂飆加速更早觸發）、maxBumpCount 5→8、新增 unfilledCooldownSec=120（同 sym unfilled 後冷卻避免燒追價）
+  cfgMigV: 12,
 };
 let simTrades = [];
 let simCfg = { ...SIM_DEFAULT_CFG };
@@ -6779,6 +6784,13 @@ function loadSimTrades() {
             if (typeof simCfg.targetPct === "number" && simCfg.targetPct === 0.006) simCfg.targetPct = 0.004;
             if (typeof simCfg.wrMin050 === "number" && simCfg.wrMin050 === 0.30) simCfg.wrMin050 = 0.60;
             if (typeof simCfg.gradientLevel === "number" && simCfg.gradientLevel === 3) simCfg.gradientLevel = 1;
+          }
+          // v12: 追價可達性收緊（AMD 飆股實測 unfilled 13 筆）——只覆寫仍是 v11 預設的欄位
+          if (_curMigV < 12) {
+            if (typeof simCfg.chaseBumpPct === "number" && simCfg.chaseBumpPct === 0.01) simCfg.chaseBumpPct = 0.05;
+            if (typeof simCfg.chasePanicGapPct === "number" && simCfg.chasePanicGapPct === 0.5) simCfg.chasePanicGapPct = 0.3;
+            if (typeof simCfg.maxBumpCount === "number" && simCfg.maxBumpCount === 5) simCfg.maxBumpCount = 8;
+            if (simCfg.unfilledCooldownSec == null) simCfg.unfilledCooldownSec = 120;
           }
           simCfg.cfgMigV = _newMigV;
           // 在 loadSimTrades 完成後的 setTimeout 不來得及，下一次 saveSimCfg 會寫回。為穩鬼主動寫回。
@@ -7089,6 +7101,21 @@ function addSimTrade(sym, targetPct, marketPrice, opts) {
   if (dup) {
     _logSim("reject", sym, `3 秒內重複請求 target=${(targetPct*100).toFixed(2)}%`, { src: _src });
     return null;
+  }
+  // v.45 同 sym unfilled 冷卻：避免飆股連續燒追價步數（AMD 13 筆 unfilled 教訓）
+  const _coolSec = Math.max(0, +simCfg.unfilledCooldownSec || 0);
+  if (_coolSec > 0) {
+    let _lastUnfilled = 0;
+    for (const _t of simTrades) {
+      if (_t.sym === sym && _t.status === "unfilled" && (_t.exitTime || 0) > _lastUnfilled) _lastUnfilled = _t.exitTime || 0;
+    }
+    if (_lastUnfilled > 0) {
+      const _elapsedSec = Math.floor((now - _lastUnfilled) / 1000);
+      if (_elapsedSec < _coolSec) {
+        _logSim("reject", sym, `unfilled 冷卻中：上次失敗 ${_elapsedSec}s 前 < ${_coolSec}s（避免追飆股反覆失敗）`, { src: _src });
+        return null;
+      }
+    }
   }
   // 金額 = 0 → 不下單（僅做訊號統計）
   if ((+simCfg.amountPerTradeUsd || 0) <= 0) {
