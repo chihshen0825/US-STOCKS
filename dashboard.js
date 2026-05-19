@@ -3384,10 +3384,10 @@ async function computeWatchlistRow(sym, name) {
   };
   const _wrFb = (target, isDown) => {
     const fn = isDown ? winRateDownPct : winRatePct;
-    const v1 = fn(_d1Bars, target, 10, 20);
-    if (v1 != null) return { v: v1, src: "1m", n: _wrN(_d1Bars, 10, 20) };
-    const v5 = fn(_d5Bars, target, 3, 12);
-    if (v5 != null) return { v: v5, src: "5m", n: _wrN(_d5Bars, 3, 12) };
+    const v1 = fn(_d1Bars, target, 10, 30);
+    if (v1 != null) return { v: v1, src: "1m", n: _wrN(_d1Bars, 10, 30) };
+    const v5 = fn(_d5Bars, target, 3, 20);
+    if (v5 != null) return { v: v5, src: "5m", n: _wrN(_d5Bars, 3, 20) };
     return { v: null, src: "1m", n: 0 };
   };
   { const o = _wrFb(0.003, false); row.wr030 = o.v; row.wrN030 = o.n; }
@@ -4272,9 +4272,9 @@ function renderWatchlist() {
       ppCell(r.post) +
       `<td class="sig-cell${lowConfCls1}"${confTitle1}>${flipBadge}<span class="sig ${r.cls1}">${r.label1}</span> <span class="sig-score">${fmt(r.score1, 1)}</span></td>` +
       `<td class="sig-cell${lowConfCls5}"${confTitle5}><span class="sig ${r.cls5}">${r.label5}</span> <span class="sig-score">${fmt(r.score5, 1)}</span></td>` +
-      `<td class="num wr030 ${r.wr030 != null && r.wr030 >= 0.50 ? "win-good" : r.wr030 != null && r.wr030 <= 0.10 ? "win-bad" : ""}" title="「未來 10 分鐘」內最高漲幅 ≥ +0.3% 的歷史命中率。&#10;&#10;計算來源：${r.wrSrc === "5m" ? "5m K 線 × 3 根 ≈ 15 分鐘（fallback「1m bar 不足」）" : "近 10 根 1m K 線（盤中≈ 10 分鐘、盤前/後可能拉長到 20–30+ 分鐘）"}&#10;取樣範圍：${r.wrScope === "rth" ? "僅盤中 bars（已過濾盤前/後）" : "混合盤前+盤中+盤後（可勾「僅盤中」設定）"}&#10;樣本 N：${r.wrN030 ?? 0} 根${(r.wrN030 ?? 0) < 8 ? " (偏少)" : ""}">${r.wr030 == null ? "--" : Math.round(r.wr030*100) + "%"}${r.wr030 != null && r.wrSrc === "5m" ? "<sup class=\"wr-src\">5m</sup>" : ""}${r.wr030 != null && r.wrScope === "rth" ? "<sup class=\"wr-src wr-rth\">R</sup>" : ""}${r.wr030 != null && (r.wrN030 ?? 0) < 8 ? "<sup class=\"wr-src wr-warn\" title=\"樣本不足 8 根，數值參考性偏低\">⚠</sup>" : ""}</td>` +
-      `<td class="num wr050 ${r.wr050 != null && r.wr050 >= 0.30 ? "win-good" : r.wr050 != null && r.wr050 <= 0.05 ? "win-bad" : ""}" title="「未來 10 分鐘」內最高漲幅 ≥ +0.5% 的歷史命中率。&#10;&#10;計算來源：${r.wrSrc === "5m" ? "5m K 線 × 3 根 ≈ 15 分鐘（fallback）" : "近 10 根 1m K 線（盤中≈ 10 分鐘）"}&#10;取樣範圍：${r.wrScope === "rth" ? "僅盤中 bars" : "混合全時段"}&#10;樣本 N：${r.wrN050 ?? 0} 根${(r.wrN050 ?? 0) < 8 ? " (偏少)" : ""}">${r.wr050 == null ? "--" : Math.round(r.wr050*100) + "%"}${r.wr050 != null && r.wrSrc === "5m" ? "<sup class=\"wr-src\">5m</sup>" : ""}${r.wr050 != null && r.wrScope === "rth" ? "<sup class=\"wr-src wr-rth\">R</sup>" : ""}${r.wr050 != null && (r.wrN050 ?? 0) < 8 ? "<sup class=\"wr-src wr-warn\" title=\"樣本不足 8 根，數值參考性偏低\">⚠</sup>" : ""}</td>` +
-      `<td class="num wr050d ${r.wr050d != null && r.wr050d >= 0.30 ? "win-bad" : r.wr050d != null && r.wr050d <= 0.05 ? "win-good" : ""}" title="「未來 10 分鐘」內最低跌幅 ≤ -0.5% 的歷史發生率（賠率、越低越住）。&#10;&#10;計算來源：${r.wrSrc === "5m" ? "5m K 線 × 3 根 ≈ 15 分鐘（fallback）" : "近 10 根 1m K 線"}&#10;取樣範圍：${r.wrScope === "rth" ? "僅盤中 bars" : "混合全時段"}&#10;樣本 N：${r.wrN050d ?? 0} 根${(r.wrN050d ?? 0) < 8 ? " (偏少)" : ""}">${r.wr050d == null ? "--" : Math.round(r.wr050d*100) + "%"}${r.wr050d != null && r.wrSrc === "5m" ? "<sup class=\"wr-src\">5m</sup>" : ""}${r.wr050d != null && r.wrScope === "rth" ? "<sup class=\"wr-src wr-rth\">R</sup>" : ""}${r.wr050d != null && (r.wrN050d ?? 0) < 8 ? "<sup class=\"wr-src wr-warn\" title=\"樣本不足 8 根，數值參考性偏低\">⚠</sup>" : ""}</td>` +
+      `<td class="num wr030 ${r.wr030 != null && r.wr030 >= 0.50 ? "win-good" : r.wr030 != null && r.wr030 <= 0.10 ? "win-bad" : ""}" title="「未來 10 分鐘」內「先觸 +0.3% 而未先破 -0.3%」的歷史機率（first-touch ordering、含停損模擬）。&#10;同根 bar 兩邊都觸→悲觀視為先觸停損。&#10;&#10;計算來源：${r.wrSrc === "5m" ? "5m K 線 × 3 根 ≈ 15 分鐘（fallback「1m bar 不足」）" : "近 10 根 1m K 線（盤中≈ 10 分鐘、盤前/後可能拉長到 20–30+ 分鐘）"}&#10;取樣範圍：${r.wrScope === "rth" ? "僅盤中 bars（已過濾盤前/後）" : "混合盤前+盤中+盤後（可勾「僅盤中」設定）"}&#10;樣本 N：${r.wrN030 ?? 0} 根${(r.wrN030 ?? 0) < 8 ? " (偏少)" : ""}">${r.wr030 == null ? "--" : Math.round(r.wr030*100) + "%"}${r.wr030 != null && r.wrSrc === "5m" ? "<sup class=\"wr-src\">5m</sup>" : ""}${r.wr030 != null && r.wrScope === "rth" ? "<sup class=\"wr-src wr-rth\">R</sup>" : ""}${r.wr030 != null && (r.wrN030 ?? 0) < 8 ? "<sup class=\"wr-src wr-warn\" title=\"樣本不足 8 根，數值參考性偏低\">⚠</sup>" : ""}</td>` +
+      `<td class="num wr050 ${r.wr050 != null && r.wr050 >= 0.30 ? "win-good" : r.wr050 != null && r.wr050 <= 0.05 ? "win-bad" : ""}" title="「未來 10 分鐘」內「先觸 +0.5% 而未先破 -0.5%」的歷史機率（first-touch ordering、含停損模擬）。&#10;同根 bar 兩邊都觸→悲觀視為先觸停損。&#10;&#10;計算來源：${r.wrSrc === "5m" ? "5m K 線 × 3 根 ≈ 15 分鐘（fallback）" : "近 10 根 1m K 線（盤中≈ 10 分鐘）"}&#10;取樣範圍：${r.wrScope === "rth" ? "僅盤中 bars" : "混合全時段"}&#10;樣本 N：${r.wrN050 ?? 0} 根${(r.wrN050 ?? 0) < 8 ? " (偏少)" : ""}">${r.wr050 == null ? "--" : Math.round(r.wr050*100) + "%"}${r.wr050 != null && r.wrSrc === "5m" ? "<sup class=\"wr-src\">5m</sup>" : ""}${r.wr050 != null && r.wrScope === "rth" ? "<sup class=\"wr-src wr-rth\">R</sup>" : ""}${r.wr050 != null && (r.wrN050 ?? 0) < 8 ? "<sup class=\"wr-src wr-warn\" title=\"樣本不足 8 根，數值參考性偏低\">⚠</sup>" : ""}</td>` +
+      `<td class="num wr050d ${r.wr050d != null && r.wr050d >= 0.30 ? "win-bad" : r.wr050d != null && r.wr050d <= 0.05 ? "win-good" : ""}" title="「未來 10 分鐘」內「先破 -0.5% 而未先觸 +0.5%」的歷史機率（賠率、越低越住，first-touch ordering）。&#10;同根 bar 兩邊都觸→悲觀視為先觸反向（上漲方向，對空單不利）。&#10;&#10;計算來源：${r.wrSrc === "5m" ? "5m K 線 × 3 根 ≈ 15 分鐘（fallback）" : "近 10 根 1m K 線"}&#10;取樣範圍：${r.wrScope === "rth" ? "僅盤中 bars" : "混合全時段"}&#10;樣本 N：${r.wrN050d ?? 0} 根${(r.wrN050d ?? 0) < 8 ? " (偏少)" : ""}">${r.wr050d == null ? "--" : Math.round(r.wr050d*100) + "%"}${r.wr050d != null && r.wrSrc === "5m" ? "<sup class=\"wr-src\">5m</sup>" : ""}${r.wr050d != null && r.wrScope === "rth" ? "<sup class=\"wr-src wr-rth\">R</sup>" : ""}${r.wr050d != null && (r.wrN050d ?? 0) < 8 ? "<sup class=\"wr-src wr-warn\" title=\"樣本不足 8 根，數值參考性偏低\">⚠</sup>" : ""}</td>` +
       confluenceCell +
       rsCell +
       `<td class="num hot-cell ${r.hotScore == null ? "" : r.hotScore >= 6 ? "hot-strong" : r.hotScore >= 3 ? "hot-watch" : r.hotScore <= -3 ? "hot-cold" : ""}" title="飆股潛力分=score1×1+score5×0.7+5分↑×1.5+5m量爆+1.5−RSI5≥80×2−下跌振幅">${r.hotScore == null ? "--" : (r.hotScore >= 0 ? "+" : "") + r.hotScore.toFixed(1)}</td>` +
@@ -5066,40 +5066,57 @@ function bindLevelHover(canvas) {
   canvas.addEventListener("mouseleave", () => { hideLvTip(); canvas.style.cursor = ""; });
 }
 
-function winRatePct(bars, target, K = 10, WIN = 20) {
+// 勝率（多）：未來 K 根 bar 內「先觸 +target 而未先破 -target」的歷史機率（first-touch ordering）。
+// 同根 bar 內若上下兩邊都觸及 → 悲觀視為先觸 stop（loss），避免高估勝率。
+// 取最近 WIN 個 entry 窗口（每窗 K 根 lookahead）。N 不足或 K 內未觸任一邊不列入分子，但仍計入分母。
+function winRatePct(bars, target, K = 10, WIN = 30) {
   if (!bars || bars.length < 2) return null;
   const tail = [];
   const start = Math.max(0, bars.length - WIN - K);
   for (let i = start; i + K < bars.length; i++) {
     const entry = bars[i].c;
     if (!entry) continue;
-    let m = -Infinity;
+    let outcome = 0; // -1 = stop 先觸、+1 = target 先觸、0 = K 內未觸任一邊
     for (let j = i + 1; j <= i + K; j++) {
       const h = bars[j].h ?? bars[j].c;
-      if (h != null) m = Math.max(m, (h - entry) / entry);
+      const l = bars[j].l ?? bars[j].c;
+      const upPct = (h != null) ? (h - entry) / entry : null;
+      const dnPct = (l != null) ? (l - entry) / entry : null;
+      const upHit = upPct != null && upPct >= target;
+      const dnHit = dnPct != null && dnPct <= -target;
+      if (dnHit) { outcome = -1; break; } // 悲觀估計：同根 bar 兩邊都觸→先到 stop
+      if (upHit) { outcome = +1; break; }
     }
-    if (isFinite(m)) tail.push(m);
+    tail.push(outcome);
   }
   if (!tail.length) return null;
-  return tail.filter(v => v >= target).length / tail.length;
+  return tail.filter(v => v === 1).length / tail.length;
 }
 
-function winRateDownPct(bars, target, K = 10, WIN = 20) {
+// 勝率（空）：未來 K 根 bar 內「先觸 -target 而未先破 +target」的歷史機率（first-touch ordering）。
+// 同根 bar 兩邊都觸 → 悲觀視為先觸反向（+target）。
+function winRateDownPct(bars, target, K = 10, WIN = 30) {
   if (!bars || bars.length < 2) return null;
   const tail = [];
   const start = Math.max(0, bars.length - WIN - K);
   for (let i = start; i + K < bars.length; i++) {
     const entry = bars[i].c;
     if (!entry) continue;
-    let m = Infinity;
+    let outcome = 0;
     for (let j = i + 1; j <= i + K; j++) {
+      const h = bars[j].h ?? bars[j].c;
       const l = bars[j].l ?? bars[j].c;
-      if (l != null) m = Math.min(m, (l - entry) / entry);
+      const upPct = (h != null) ? (h - entry) / entry : null;
+      const dnPct = (l != null) ? (l - entry) / entry : null;
+      const upHit = upPct != null && upPct >= target;
+      const dnHit = dnPct != null && dnPct <= -target;
+      if (upHit) { outcome = -1; break; } // 悲觀：同根兩邊都觸→先觸反向 (上漲送給空單)
+      if (dnHit) { outcome = +1; break; }
     }
-    if (isFinite(m)) tail.push(m);
+    tail.push(outcome);
   }
   if (!tail.length) return null;
-  return tail.filter(v => v <= -target).length / tail.length;
+  return tail.filter(v => v === 1).length / tail.length;
 }
 
 function drawWinRate(card, bars) {
@@ -6184,15 +6201,16 @@ const SIM_DEFAULT_CFG = {
   sessionMode: "rth",
   // 盤前/盤後額外手續費（分數形式，0.0005 = 0.05%），預設 0 = 不加（避免默默吞掉 1/3 目標獲利）
   extendedFeePct: 0,
-  // 勝率計算只取 RTH bars。預設 false：混合所有 bars，避免盤前看 RTH 歷史失真
-  wrRthOnly: false,
+  // 勝率計算只取 RTH bars。預設 true：避免盤前/後稀疏 bar 把 wr 算高/低。
+  wrRthOnly: true,
   // 執行模式：0 = 本地模擬（1 = WS 實交
   executionMode: 0,
   wsUrl: "ws://127.0.0.1:1088/",
   autoEnabled: false,
   // 一次性預設 migration 版本：當載入的舊 cfg cfgMigV < 此值時，會強制套用「新預設」到指定欄位並升位。
   // v2 (2026-05-19): wrRthOnly→false, extendedFeePct→0
-  cfgMigV: 2,
+  // v3 (2026-05-19): wrRthOnly→true（配合 first-touch 勝率演算法重計，避免盤前稀疏 bar 遭志）
+  cfgMigV: 3,
 };
 let simTrades = [];
 let simCfg = { ...SIM_DEFAULT_CFG };
@@ -6255,10 +6273,14 @@ function loadSimTrades() {
             simCfg.wrRthOnly = false;
             simCfg.extendedFeePct = 0;
           }
+          // v3: 配合 first-touch 勝率演算法，「勝率只用盤中」強制開啟（避免盤前稀疏 bar 遭志）
+          if (_curMigV < 3) {
+            simCfg.wrRthOnly = true;
+          }
           simCfg.cfgMigV = _newMigV;
           // 在 loadSimTrades 完成後的 setTimeout 不來得及，下一次 saveSimCfg 會寫回。為穩鬼主動寫回。
           try { chrome.storage?.local.set({ [SIM_CFG_KEY]: simCfg }); } catch {}
-          try { console.info(`[sim] cfg migrated → v${_newMigV} (wrRthOnly=false, extendedFeePct=0)`); } catch {}
+          try { console.info(`[sim] cfg migrated → v${_newMigV} (wrRthOnly=true 配合 first-touch 勝率)`); } catch {}
         }
       }
       // 安全：自動買入「不」跨 session 記憶，每次開 popup 都必須手動啟用
