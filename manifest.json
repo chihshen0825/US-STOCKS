@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "短線技術面儀表板 (3 檔)",
-  "version": "1.2026.519.43",
+  "version": "1.2026.520.44",
   "description": "測試軟件",
   "action": {
     "default_title": "開啟短線技術面儀表板"

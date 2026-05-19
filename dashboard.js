@@ -3061,7 +3061,7 @@ function renderQuick(card, sym, intra) {
         if (_brk.wickLowerPct != null) parts.push(`末根下影 ${_brk.wickLowerPct.toFixed(0)}%`);
         if (_brk.rsiCrossUp30)         parts.push("RSI 由超賣 cross-up 30");
       }
-      brkEl.title = parts.join(" / ");
+      brkEl.title = (cls === "squeeze" ? _SQUEEZE_BBW_TIP + "\n──────────\n" : "") + parts.join(" / ");
     } else {
       brkEl.hidden = true;
       brkEl.textContent = "";
@@ -6133,6 +6133,36 @@ function _fmtNum(v, dp = 2) {
   if (v == null || !isFinite(v)) return `<span class="miss">—</span>`;
   return v.toFixed(dp);
 }
+
+// 🔒 壓縮 BBW badge 詳細說明（hover 卡片上的 badge 時顯示）
+const _SQUEEZE_BBW_TIP = [
+  "🔒 壓縮 BBW（Bollinger Band Width 收斂）",
+  "",
+  "【是什麼】",
+  "　BBW = (布林上軌 − 布林下軌) ÷ 中軌 × 100%",
+  "　＝以「百分比」衡量近 20 根 K 棒的波動率",
+  "　數字越小 → 上下軌越貼近中軌 → 股價陷入膠著（squeeze）",
+  "",
+  "【為何重要】",
+  "　波動率不會永遠收斂；越是「死寂」越接近「大行情」",
+  "　壓縮期通常出現在：橫盤整理 / 重大事件前 / 籌碼換手末段",
+  "　突破方向一旦確立，常伴隨量爆 + 連續放大 BBW（expansion）",
+  "",
+  "【本工具觸發條件】",
+  "　BBW < 設定門檻（預設 1.2%）  或  ATR < 0.4%",
+  "　兩者擇一成立即標記為「壓縮中」",
+  "　壓縮 + score 接近 BUY 門檻時自動 +0.5 加分（更敏感）",
+  "",
+  "【實戰建議】",
+  "　1. 看到 🔒 不要立即進場，先等突破方向",
+  "　2. 突破上軌 + 量比 ≥ 2x → 做多",
+  "　3. 跌破下軌 + 量比 ≥ 2x → 做空 / 觀望",
+  "　4. 假突破常見，務必等收盤確認或 5 分內不破再加碼",
+  "",
+  "【絕對值無法跨檔比較】",
+  "　高 β 股 BBW 天生較大；務必對照「該股自己歷史」",
+  "　可搭配 ATR%（同列顯示）一起判斷波動是否真的偏低"
+].join("\n");
 
 // 在小 canvas 上畫 OHLC 蠟燭，dIndex 為 D 當日位置（黃色高亮）
 const _MINIK_TIP = [
