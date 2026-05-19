@@ -81,7 +81,7 @@ const PRESETS_THR = {
 // v.22 每個 preset 對應的 simCfg auto-buy 預設值（點 preset 按鈕時同步套用，保留用戶其他客製）
 const PRESETS_SIMCFG = {
   conservative: { requireBreakout: true,  preMarketBuyMode: 'disabled',     wrMin: 0.75, wrMin050: 0.40, wrMax050d: 0.08, gradientLevel: 3, requireHistTurnUp: true,  minVolBurstAuto: 2.5, rsiMaxAuto: 70 },
-  standard:     { requireBreakout: false, preMarketBuyMode: 'breakoutOnly', wrMin: 0.65, wrMin050: 0.35, wrMax050d: 0.10, gradientLevel: 3, requireHistTurnUp: true,  minVolBurstAuto: 2.0, rsiMaxAuto: 75 },
+  standard:     { requireBreakout: false, preMarketBuyMode: 'breakoutOnly', wrMin: 0.60, wrMin050: 0.35, wrMax050d: 0.10, gradientLevel: 3, requireHistTurnUp: true,  minVolBurstAuto: 2.0, rsiMaxAuto: 75 },
   aggressive:   { requireBreakout: false, preMarketBuyMode: 'normal',       wrMin: 0.50, wrMin050: 0.20, wrMax050d: 0.25, gradientLevel: 1, requireHistTurnUp: false, minVolBurstAuto: 0,   rsiMaxAuto: 0  },
 };
 const THR_KEY = "dash_thresholds_v1";
@@ -6499,8 +6499,8 @@ const SIM_DEFAULT_CFG = {
   extendedFeePct: 0,
   // 進場滑價護欄：實際成交價相對「下單時市價(placedPrice)」的不利偏移超過此值 → 取消下單(unfilled)。
   // 多單(side='up')：buyPx 高於 placedPrice 多少；空單(side='down')：buyPx 低於 placedPrice 多少。
-  // 預設 0.002 (=0.2%)；0 = 關閉護欄。建議 ≤ targetPct 的一半，避免追價滑點吃光獲利空間。
-  maxEntrySlipPct: 0.002,
+  // v.32 預設 0.005 (=0.5%)；0 = 關閉護欄。開盤跳空時 0.2% 太緊全擋掉。建議 ≤ targetPct，避免追價滑點吃光獲利空間。
+  maxEntrySlipPct: 0.005,
   // v.27 追價次數上限：bumpCount ≥ 此值 → 取消下單（避免限價單一路追到當下波段高點再成交）。
   // 預設 5；0 = 關閉。實測 bumpCount 10+ 的單常買在峰頂，targetPct 0.4% 撐不過追價滑點。
   maxBumpCount: 5,
@@ -6538,7 +6538,8 @@ const SIM_DEFAULT_CFG = {
   // v7 (2026-05-19): 新增起漲點品質過濾 requireHistTurnUp=true / minVolBurstAuto=2.0 / rsiMaxAuto=75
   // v8 (2026-05-19): maxEntrySlipPct 0.005→0.002（避免追價滑點吃光 0.4% 目標）；新增 maxBumpCount=5（追價超過 5 次就放棄）
   // v9 (2026-05-19): 根據實戰的 6 筆賠損分析收緊 preset 預設 —— targetPct 0.4%→0.6%、標準 preset wrMin 60%→65% / wrMax050d 15%→10%
-  cfgMigV: 9,
+  // v10 (2026-05-19): 開盤實測 v9 太緊全擋掉（wr 50-60% 區段被刷掉、開盤跳空 0.2% slip 也被擋）—— 回 wrMin 65%→60%、maxEntrySlipPct 0.002→0.005
+  cfgMigV: 10,
 };
 let simTrades = [];
 let simCfg = { ...SIM_DEFAULT_CFG };
@@ -6631,6 +6632,11 @@ function loadSimTrades() {
             if (typeof simCfg.targetPct === "number" && simCfg.targetPct <= 0.004) simCfg.targetPct = 0.006;
             if (typeof simCfg.wrMin === "number" && simCfg.wrMin <= 0.60) simCfg.wrMin = 0.65;
             if (typeof simCfg.wrMax050d === "number" && simCfg.wrMax050d >= 0.15) simCfg.wrMax050d = 0.10;
+          }
+          // v10: 開盤實測 v9 太緊——回 wrMin 0.65→0.60（保留 0.60 以上自訂值），maxEntrySlipPct 0.002→0.005（保留 ≥0.005 自訂值）
+          if (_curMigV < 10) {
+            if (typeof simCfg.wrMin === "number" && simCfg.wrMin === 0.65) simCfg.wrMin = 0.60;
+            if (typeof simCfg.maxEntrySlipPct === "number" && simCfg.maxEntrySlipPct <= 0.002) simCfg.maxEntrySlipPct = 0.005;
           }
           simCfg.cfgMigV = _newMigV;
           // 在 loadSimTrades 完成後的 setTimeout 不來得及，下一次 saveSimCfg 會寫回。為穩鬼主動寫回。
