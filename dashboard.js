@@ -2816,14 +2816,19 @@ const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
 
 function renderQuick(card, sym, intra) {
   card.querySelector(".name").textContent = intra.name;
-  card.querySelector(".price").textContent = fmt(intra.price, 2);
-  const diff = intra.price - intra.prevClose;
-  const pct  = (diff / intra.prevClose) * 100;
-  const cls  = diff > 0 ? "up" : diff < 0 ? "down" : "flat";
-  const sign = diff > 0 ? "+" : "";
+  // 「現價 / 漲跌」改用 _pickFreshIntraPrice 透出最新一筆（pre / post / reg 中時間戳最新者），
+  // 避免盤前 / 盤後 Yahoo regularMarketPrice 未更新 → 卡片顯示昨收使漲跌全部歸零、與 watchlist row 不一致。
+  const _fresh = _pickFreshIntraPrice(intra);
+  const _displayPx = (_fresh.price != null) ? _fresh.price : intra.price;
+  card.querySelector(".price").textContent = fmt(_displayPx, 2);
+  const diff = (_displayPx != null && intra.prevClose != null) ? (_displayPx - intra.prevClose) : null;
+  const pct  = (diff != null && intra.prevClose) ? (diff / intra.prevClose) * 100 : null;
+  const cls  = diff == null ? "flat" : diff > 0 ? "up" : diff < 0 ? "down" : "flat";
+  const sign = diff != null && diff > 0 ? "+" : "";
   const ch = card.querySelector(".change");
   ch.className = "change " + cls;
-  ch.textContent = `${sign}${fmt(diff, 2)} (${sign}${fmt(pct, 2)}%)`;
+  ch.textContent = (diff == null) ? "-- (--)" : `${sign}${fmt(diff, 2)} (${sign}${fmt(pct, 2)}%)`;
+  if (_fresh.src && _fresh.src !== "reg") ch.title = `價格來源：${_fresh.src === "pre" ? "盤前最新 tick" : "盤後最新 tick"}（regularMarketPrice 未更新）`; else ch.removeAttribute("title");
   // 建議購買價格：取自 wlData（由 watchlist row 計算）
   const sb = card.querySelector(".suggest-buy");
   if (sb) {
@@ -4897,10 +4902,13 @@ function computeLevels(intra) {
   const recHigh60 = hi60.length ? Math.max(...hi60) : null;
   const recLow60  = lo60.length ? Math.min(...lo60) : null;
   // 支擐候選：所有 < price 的候選中取最大（最貼近價）
+  // 加上 0.3% 最小距離門檻：平穩盤面（盤前無波動）recLow30 可能只比 price 低 0.01，
+  // 作為「停損」展示會得到「停損=現價、-0.00%」的無意義輸出。
+  const MIN_LV_GAP = 0.003;
   const supCands = [intra.todayLow, recLow30, intra.prevLow, intra.prevClose]
-    .filter(v => v != null && v < price);
+    .filter(v => v != null && v < price * (1 - MIN_LV_GAP));
   const resCands = [intra.todayHigh, recHigh30, intra.prevHigh]
-    .filter(v => v != null && v > price);
+    .filter(v => v != null && v > price * (1 + MIN_LV_GAP));
   const support    = supCands.length ? Math.max(...supCands) : null;
   const resistance = resCands.length ? Math.min(...resCands) : null;
   // 次層：較遠的支擐 / 阻力（作為 trailing 目標）
