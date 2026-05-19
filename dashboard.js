@@ -5374,20 +5374,24 @@ function drawSpark(canvas, bars, refClose, levels) {
   const PH = H - AXIS_H;        // 畫圖區高度
   ctx.clearRect(0, 0, W, H);
   const closes = bars.map(b => b.c);
+  // Y 軌只依「實際 K 線價格」決定，不再讓支撐/阻力拉大尺規 → 否則股價細微變化被壓平看不見。
+  // 取 closes + bars high/low 為基底，給 2% padding 讓走勢不黏邊。
   let max = Math.max(...closes), min = Math.min(...closes);
-  // 將支擐 / 阻力納入 y 軌範圍（限制在±10%內避免被楫到出去）
+  for (const b of bars) {
+    if (b.h != null && b.h > max) max = b.h;
+    if (b.l != null && b.l < min) min = b.l;
+  }
+  // padding：上下各 1.5%，避免線貼到頂/底
+  const _pad = Math.max((max - min) * 0.05, max * 0.0015) || 0.01;
+  max += _pad; min -= _pad;
+  // 收集所有支撐/阻力，但「不再納入 min/max」。
+  // 在視野內 → 畫水平線並貼近 y 座標；在視野外 → 釘到頂/底邊緣（label 加 ↑/↓ 與實際價）。
   const lvList = [];
   if (levels) {
-    const ref = levels.price ?? closes[closes.length - 1];
-    const inBand = v => v != null && Math.abs((v - ref) / ref) <= 0.10;
-    if (inBand(levels.support))     lvList.push({ v: levels.support,     label: "支",  cls: "sup"  });
-    if (inBand(levels.support2))    lvList.push({ v: levels.support2,    label: "支2", cls: "sup2" });
-    if (inBand(levels.resistance))  lvList.push({ v: levels.resistance,  label: "阻",  cls: "res"  });
-    if (inBand(levels.resistance2)) lvList.push({ v: levels.resistance2, label: "阻2", cls: "res2" });
-    for (const l of lvList) {
-      if (l.v > max) max = l.v;
-      if (l.v < min) min = l.v;
-    }
+    if (levels.support     != null) lvList.push({ v: levels.support,     label: "支",  cls: "sup"  });
+    if (levels.support2    != null) lvList.push({ v: levels.support2,    label: "支2", cls: "sup2" });
+    if (levels.resistance  != null) lvList.push({ v: levels.resistance,  label: "阻",  cls: "res"  });
+    if (levels.resistance2 != null) lvList.push({ v: levels.resistance2, label: "阻2", cls: "res2" });
   }
   const range = max - min || 1;
   const dx = PW / (closes.length - 1 || 1);
@@ -5418,7 +5422,7 @@ function drawSpark(canvas, bars, refClose, levels) {
   });
   ctx.stroke();
 
-  // 畫出支擐 / 阻力水平線
+  // 畫出支撐 / 阻力水平線（在視野內才畫線；視野外只在頂/底邊釘 label，避免拉爆 y 軌）
   canvas._lvBoxes = [];
   if (lvList.length) {
     const colorMap = {
@@ -5429,8 +5433,15 @@ function drawSpark(canvas, bars, refClose, levels) {
     ctx.lineWidth = 1;
     ctx.font = "bold 13px system-ui, -apple-system, 'Microsoft JhengHei', sans-serif";
     ctx.textBaseline = "middle";
-    // 先畫所有水平線
+    // 分類：視野內 / 上方 off-screen / 下方 off-screen
+    const inView = [], aboveTop = [], belowBot = [];
     for (const l of lvList) {
+      if (l.v > max) aboveTop.push(l);
+      else if (l.v < min) belowBot.push(l);
+      else inView.push(l);
+    }
+    // 視野內：原本邏輯（畫橫線 + 在線旁放標籤）
+    for (const l of inView) {
       const yy = y(l.v);
       const c  = colorMap[l.cls] || "#888";
       ctx.strokeStyle = c;
@@ -5441,24 +5452,30 @@ function drawSpark(canvas, bars, refClose, levels) {
       ctx.stroke();
     }
     ctx.setLineDash([]);
-    // 再放標籤：以線為中心，遇到垂直重疊就往右挪一格，避免文字疊在一起
-    const boxes = lvList.map(l => {
+    // off-screen：標籤釘在頂/底邊，加 ↑/↓ 表示真實價在外
+    const offBoxes = [];
+    for (const l of aboveTop) {
+      const text = `${l.label} ↑ ${l.v.toFixed(2)}`;
+      const tw = ctx.measureText(text).width;
+      offBoxes.push({ l, text, boxW: tw + 12, boxH: 19, cy: 1 + 19 / 2 }); // 靠頂
+    }
+    for (const l of belowBot) {
+      const text = `${l.label} ↓ ${l.v.toFixed(2)}`;
+      const tw = ctx.measureText(text).width;
+      offBoxes.push({ l, text, boxW: tw + 12, boxH: 19, cy: PH - 1 - 19 / 2 }); // 靠底
+    }
+    // 視野內標籤
+    const inBoxes = inView.map(l => {
       const text = `${l.label}：${l.v.toFixed(2)}`;
       const padX = 6, padY = 3, tw = ctx.measureText(text).width, th = 13;
-      return {
-        l, text,
-        boxW: tw + padX * 2,
-        boxH: th + padY * 2,
-        cy: y(l.v),
-      };
+      return { l, text, boxW: tw + padX * 2, boxH: th + padY * 2, cy: y(l.v) };
     });
+    const boxes = [...inBoxes, ...offBoxes];
     boxes.sort((a, b) => a.cy - b.cy);
     const placed = [];
     for (const b of boxes) {
       let by = b.cy - b.boxH / 2;
-      // 夾回畫布
       by = Math.max(1, Math.min(PH - b.boxH - 1, by));
-      // 同列偵測：若與已放置的標籤垂直區間重疊，往右排
       let bx = 2;
       const verticallyOverlaps = (p) =>
         !(by + b.boxH <= p.by || by >= p.by + p.boxH);
@@ -5469,10 +5486,8 @@ function drawSpark(canvas, bars, refClose, levels) {
         bx = conflict.bx + conflict.boxW + 4;
         tries++;
       }
-      // 超出右邊（避免壓到右側價格軸），改為強制換行向上/向下推
       if (bx + b.boxW > PW - 4) {
         bx = 2;
-        // 嘗試上方
         const aboveY = b.cy - b.boxH - 2;
         const belowY = b.cy + 2;
         const candidates = [aboveY, belowY]
