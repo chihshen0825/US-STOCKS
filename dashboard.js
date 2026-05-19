@@ -2526,7 +2526,9 @@ async function fetchIntraday(symbol) {
     name: snap?.name ?? meta.shortName ?? meta.longName ?? symbol,
     marketState: snap?.marketState ?? meta.marketState,
     // 今日 / 昨日 OHL（皆來自 daily snap，跨時間框架不會跳動）
-    todayOpen: snap?.todayOpen ?? null,
+    // todayOpen 多一層 fallback 到 meta.regularMarketOpen：盤前 / 剛開盤時 daily bar 的 open
+    // 可能尚未寫入，先用 meta 的即時 open 顯示，避免「開: --」。
+    todayOpen: snap?.todayOpen ?? meta.regularMarketOpen ?? null,
     todayHigh: snap?.todayHigh ?? snap?.high ?? null,
     todayLow:  snap?.todayLow  ?? snap?.low  ?? null,
     prevOpen:  snap?.prevOpen  ?? null,
