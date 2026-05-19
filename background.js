@@ -24,8 +24,17 @@ chrome.action.onClicked.addListener(async () => {
 const DEFAULT_REPO = "chihshen0825/US-STOCKS"; // GitHub Releases 來源
 const UPDATE_INFO_KEY = "dash_update_info";
 const UPDATE_REPO_KEY = "dash_update_repo";
+const UPDATE_ENABLED_KEY = "dash_update_enabled"; // 使用者可停用自動檢查（undefined / true = 啟用；false = 停用）
 const UPDATE_ALARM_NAME = "dashUpdateCheck";
 const UPDATE_PERIOD_MIN = 360; // 6 小時
+
+async function isUpdateEnabled() {
+  try {
+    const r = await chrome.storage.local.get([UPDATE_ENABLED_KEY]);
+    // 未設定（首次安裝）視為啟用
+    return r?.[UPDATE_ENABLED_KEY] !== false;
+  } catch { return true; }
+}
 
 /** 比較語意化版號 "1.2026.5.19" vs "1.2026.5.20" → 1 / 0 / -1 */
 function cmpVer(a, b) {
@@ -47,7 +56,8 @@ async function getRepo() {
   } catch { return DEFAULT_REPO; }
 }
 
-async function checkLatestRelease() {
+async function checkLatestRelease(opts) {
+  if (!opts?.force && !(await isUpdateEnabled())) return; // 使用者停用（force=true 時跳過此檢查，給手動檢查用）
   const repo = await getRepo();
   if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo)) return; // 沒設定就略過
   const currentVer = chrome.runtime.getManifest().version;
@@ -89,9 +99,14 @@ async function checkLatestRelease() {
   }
 }
 
-/** 安裝 / 啟動時設定 alarm（idempotent），並立即跑一次。 */
+/** 安裝 / 啟動時設定 alarm（idempotent），並立即跑一次。停用時則清掉 alarm。 */
 async function ensureUpdateAlarm() {
   try {
+    const enabled = await isUpdateEnabled();
+    if (!enabled) {
+      try { await chrome.alarms.clear(UPDATE_ALARM_NAME); } catch {}
+      return;
+    }
     const existed = await chrome.alarms.get(UPDATE_ALARM_NAME);
     if (!existed) {
       chrome.alarms.create(UPDATE_ALARM_NAME, {
@@ -104,6 +119,15 @@ async function ensureUpdateAlarm() {
   }
 }
 
+// 使用者切換啟用/停用時，立即套用（重新排程或清掉 alarm）
+chrome.storage?.onChanged?.addListener((changes, area) => {
+  if (area !== "local") return;
+  if (changes[UPDATE_ENABLED_KEY]) {
+    ensureUpdateAlarm();
+    if (changes[UPDATE_ENABLED_KEY].newValue !== false) checkLatestRelease();
+  }
+});
+
 chrome.runtime.onInstalled.addListener(() => { ensureUpdateAlarm(); checkLatestRelease(); });
 chrome.runtime.onStartup.addListener(() => { ensureUpdateAlarm(); checkLatestRelease(); });
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -113,7 +137,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // 允許 dashboard 主動觸發手動檢查
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.type === "checkUpdateNow") {
-    checkLatestRelease().then(() => {
+    checkLatestRelease({ force: !!msg.force }).then(() => {
       chrome.storage.local.get([UPDATE_INFO_KEY], (r) => sendResponse(r?.[UPDATE_INFO_KEY] || null));
     });
     return true; // async sendResponse

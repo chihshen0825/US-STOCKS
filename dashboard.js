@@ -9008,9 +9008,10 @@ async function initUpdateBanner() {
 async function openUpdateStatusPopover() {
   const existing = document.getElementById("updateStatusPop");
   if (existing) { existing.remove(); return; }
-  const r = await new Promise(res => chrome.storage.local.get(["dash_update_repo", UPDATE_INFO_KEY_PAGE], res));
+  const r = await new Promise(res => chrome.storage.local.get(["dash_update_repo", "dash_update_enabled", UPDATE_INFO_KEY_PAGE], res));
   const storedRepo = (r?.["dash_update_repo"] || "").trim();
   const repo = storedRepo || DEFAULT_REPO_PAGE;
+  const enabled = r?.["dash_update_enabled"] !== false; // 預設啟用
   const info = r?.[UPDATE_INFO_KEY_PAGE] || null;
   const cur = _curVer();
   const pop = document.createElement("div");
@@ -9020,26 +9021,14 @@ async function openUpdateStatusPopover() {
   pop.style.top = "60px";
   const status = !repo
     ? `<span style="color:#ff9800">⚠ 尚未設定 GitHub repo，無法檢查更新</span>`
-    : !info
-      ? `<span style="color:#8a93a0">尚未檢查過（按下方「立即檢查」即可）</span>`
-      : info.isNewer
-        ? `<span style="color:#6ee79b">✓ 有新版 v${info.latestVer}（目前 v${cur}）</span>`
-        : `<span style="color:#8a93a0">已是最新版（v${cur}）</span>`;
+    : !enabled
+      ? `<span style="color:#ff9800">⏸ 自動檢查已停用</span>`
+      : !info
+        ? `<span style="color:#8a93a0">尚未檢查過（按下方「立即檢查」即可）</span>`
+        : info.isNewer
+          ? `<span style="color:#6ee79b">✓ 有新版 v${info.latestVer}（目前 v${cur}）</span>`
+          : `<span style="color:#8a93a0">已是最新版（v${cur}）</span>`;
   const last = info?.checkedAt ? new Date(info.checkedAt).toLocaleString() : "—";
-  // 有新版時，組「下載 + 開啟 Release 頁」連結
-  const newVerBlock = (info?.isNewer && (info.assetUrl || info.htmlUrl)) ? `
-    <div style="margin-top:10px; padding:10px; background:#0f2018; border:1px solid #2a6e4a; border-radius:6px;">
-      <div style="color:#6ee79b; font-weight:700; margin-bottom:6px;">📦 取得 v${info.latestVer}</div>
-      <div style="display:flex; gap:6px; flex-wrap:wrap;">
-        ${info.assetUrl ? `<a class="ub-btn ub-primary" href="${info.assetUrl}" target="_blank" rel="noopener" style="text-decoration:none;">⬇ 下載 ZIP</a>` : ""}
-        ${info.htmlUrl ? `<a class="ub-btn ub-secondary" href="${info.htmlUrl}" target="_blank" rel="noopener" style="text-decoration:none;">📄 Release 頁</a>` : ""}
-      </div>
-      <div style="color:#8a93a0; font-size:11px; margin-top:8px; line-height:1.5;">
-        Chrome 政策禁止商店外擴充功能自動安裝，請：<br>
-        ① 下載 ZIP → 解壓覆蓋舊資料夾<br>
-        ② 到 <code>chrome://extensions</code> 按本擴充功能的 <b>⟳ Reload</b>
-      </div>
-    </div>` : "";
   pop.innerHTML = `
     <div class="ub-head">
       <span class="ub-icon">⬆</span>
@@ -9049,7 +9038,13 @@ async function openUpdateStatusPopover() {
     <div class="ub-notes" style="max-height:none;">
       <div style="margin-bottom:6px;">${status}</div>
       <div style="color:#8a93a0;">目前版本：<b style="color:#e6e6e6;">v${cur}</b>　最近檢查：${last}</div>
-      ${newVerBlock}
+      <div style="margin-top:10px;">
+        <label style="display:flex;align-items:center;gap:6px;color:#e6e6e6;cursor:pointer;user-select:none;">
+          <input id="updEnabledInput" type="checkbox" ${enabled ? "checked" : ""} style="margin:0;cursor:pointer;">
+          <span>啟用自動檢查更新（每 6 小時一次）</span>
+        </label>
+        <div style="color:#8a93a0;font-size:11px;margin-top:4px;margin-left:22px;">停用後不會向 GitHub 發出請求；仍可手動按「立即檢查」。</div>
+      </div>
       <div style="margin-top:10px;">
         <label style="display:block;color:#aab1bb;margin-bottom:4px;">GitHub repo（格式：<code>owner/repo</code>）</label>
         <input id="updRepoInput" type="text" value="${repo.replace(/"/g, "&quot;")}" placeholder="例：zenyo/shortterm-stock-dashboard"
@@ -9066,15 +9061,23 @@ async function openUpdateStatusPopover() {
   pop.querySelector(".ub-close")?.addEventListener("click", () => pop.remove());
   pop.querySelector("[data-act=save]")?.addEventListener("click", () => {
     const v = (pop.querySelector("#updRepoInput")?.value || "").trim();
-    chrome.storage.local.set({ dash_update_repo: v, [UPDATE_DISMISS_KEY]: null }, () => {
-      chrome.runtime.sendMessage({ type: "checkUpdateNow" }, (resp) => {
+    const en = !!pop.querySelector("#updEnabledInput")?.checked;
+    chrome.storage.local.set({ dash_update_repo: v, dash_update_enabled: en, [UPDATE_DISMISS_KEY]: null }, () => {
+      if (en) {
+        chrome.runtime.sendMessage({ type: "checkUpdateNow" }, () => {
+          pop.remove();
+          setTimeout(openUpdateStatusPopover, 600);
+        });
+      } else {
+        // 停用：不發 API 請求，直接重開彈窗
         pop.remove();
-        setTimeout(openUpdateStatusPopover, 600); // 重開彈窗顯示最新狀態
-      });
+        setTimeout(openUpdateStatusPopover, 200);
+      }
     });
   });
   pop.querySelector("[data-act=check]")?.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "checkUpdateNow" }, () => {
+    // 手動檢查不受啟用狀態限制（送一次性 message）
+    chrome.runtime.sendMessage({ type: "checkUpdateNow", force: true }, () => {
       pop.remove();
       setTimeout(openUpdateStatusPopover, 600);
     });
