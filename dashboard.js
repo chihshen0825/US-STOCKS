@@ -6304,6 +6304,7 @@ async function _fetchFxOnline(verbose) {
   if (fxr) fxr.value = r2.toFixed(1);
   saveSimCfg();
   try { _renderSimCfgLabels(); } catch (_) {}
+  try { _renderSimRule(); } catch (_) {}
   try { renderSimPanel(); } catch (_) {}
   if (btn) { btn.classList.add("fx-ok"); setTimeout(() => btn.classList.remove("fx-ok"), 1200); }
   console.log("[FX] updated USD→TWD =", r2);
@@ -7891,6 +7892,7 @@ if (sh)   sh.value   = String(simCfg.amountPerTradeUsd);
     if (!isFinite(raw)) return;
     simCfg.fxUsdTwd = Math.max(0.1, Math.min(500, raw));
     _renderSimCfgLabels(); saveSimCfg(); renderSimPanel();
+    try { _renderSimRule(); } catch (_) {}
   });
   fm?.addEventListener("change", () => {
     simCfg.fillMode = fm.checked ? 'optimistic' : 'strict';
