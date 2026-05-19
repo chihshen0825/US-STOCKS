@@ -9011,7 +9011,7 @@ async function openUpdateStatusPopover() {
   const r = await new Promise(res => chrome.storage.local.get(["dash_update_repo", "dash_update_enabled", UPDATE_INFO_KEY_PAGE], res));
   const storedRepo = (r?.["dash_update_repo"] || "").trim();
   const repo = storedRepo || DEFAULT_REPO_PAGE;
-  const enabled = r?.["dash_update_enabled"] !== false; // 預設啟用
+  const enabled = r?.["dash_update_enabled"] === true; // 預設停用；並與 background.js 一致
   const info = r?.[UPDATE_INFO_KEY_PAGE] || null;
   const cur = _curVer();
   const pop = document.createElement("div");

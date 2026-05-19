@@ -31,9 +31,9 @@ const UPDATE_PERIOD_MIN = 360; // 6 小時
 async function isUpdateEnabled() {
   try {
     const r = await chrome.storage.local.get([UPDATE_ENABLED_KEY]);
-    // 未設定（首次安裝）視為啟用
-    return r?.[UPDATE_ENABLED_KEY] !== false;
-  } catch { return true; }
+    // 預設為停用；使用者需明確勾選【啟用】才會自動檢查。
+    return r?.[UPDATE_ENABLED_KEY] === true;
+  } catch { return false; }
 }
 
 /** 比較語意化版號 "1.2026.5.19" vs "1.2026.5.20" → 1 / 0 / -1 */
