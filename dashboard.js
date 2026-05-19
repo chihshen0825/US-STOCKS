@@ -6135,6 +6135,22 @@ function _fmtNum(v, dp = 2) {
 }
 
 // 在小 canvas 上畫 OHLC 蠟燭，dIndex 為 D 當日位置（黃色高亮）
+const _MINIK_TIP = [
+  "財報後 13 日 K 線（D-7 ~ D+5）",
+  "",
+  "【K 棒顏色】依當日收盤漲跌（台股慣例）",
+  "　🟥 紅 K：收盤 ≥ 前日收盤（上漲）",
+  "　🟩 綠 K：收盤 ＜ 前日收盤（下跌）",
+  "",
+  "【K 棒組成】",
+  "　粗實心 = 開盤 ~ 收盤（實體 body）",
+  "　上方細線（上影線）= 當日最高價超出實體的部分",
+  "　下方細線（下影線）= 當日最低價低於實體的部分",
+  "　影線越長，盤中震盪 / 攻防失敗痕跡越明顯",
+  "",
+  "【黃色高亮框】= D+1（財報公布後第一個交易日）",
+  "　通常為財報行情主要兌現日；可看 D+1 K 棒方向與後續走勢"
+].join("\n");
 function _drawMiniCandles(canvas, bars, dIndex = 8) {
   const W = canvas.width, H = canvas.height;
   const ctx = canvas.getContext("2d");
@@ -6221,7 +6237,7 @@ function _renderWlNamePop(data, loading) {
       `<td class="num">${_fmtNum(data.nextEarn.epsActual)}</td>` +
       `<td class="num">${_fmtPctSpan(data.nextEarn.yoyPct)}</td>` +
       cells +
-      `<td><canvas class="minik" width="260" height="64" data-future="1"></canvas></td></tr>`
+      `<td title="${_MINIK_TIP}"><canvas class="minik" width="260" height="64" data-future="1"></canvas></td></tr>`
     );
   }
   for (const e of data.earnPast) {
@@ -6233,7 +6249,7 @@ function _renderWlNamePop(data, loading) {
       `<td class="num">${_fmtNum(e.epsActual)}</td>` +
       `<td class="num">${_fmtPctSpan(e.yoyPct)}</td>` +
       cells +
-      `<td><canvas class="minik" width="260" height="64" data-eidx="${idx}"></canvas></td></tr>`
+      `<td title="${_MINIK_TIP}"><canvas class="minik" width="260" height="64" data-eidx="${idx}"></canvas></td></tr>`
     );
   }
   if (!earnRows.length) earnRows.push(`<tr><td colspan="18" class="miss">無財報資料</td></tr>`);
@@ -6261,7 +6277,7 @@ function _renderWlNamePop(data, loading) {
     <div class="wlnp-section">
       <div class="wlnp-stitle">財報（D-7 … D … D+5 收盤漲跌% + K 線）</div>
       <table class="wlnp-tbl">
-        <thead><tr><th></th><th>日期</th><th class="num">單季 EPS</th><th class="num">獲利YoY%</th>${dayLabels.map(d => `<th class="num${d === "D+1" ? " dday" : ""}">${d}</th>`).join("")}<th>K</th></tr></thead>
+        <thead><tr><th></th><th>日期</th><th class="num">單季 EPS</th><th class="num">獲利YoY%</th>${dayLabels.map(d => `<th class="num${d === "D+1" ? " dday" : ""}">${d}</th>`).join("")}<th title="${_MINIK_TIP}">K</th></tr></thead>
         <tbody>${earnRows.join("")}</tbody>
       </table>
     </div>
