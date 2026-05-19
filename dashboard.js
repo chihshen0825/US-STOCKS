@@ -6373,14 +6373,15 @@ function _usSessionOfTs(ts) {
 }
 
 // 依 sessionMode 判斷當下是否可下單。
+// 注意：sessionMode="all"（全時段）代表 24/7 任意時間皆可（含休市），方便測試。
 function _canTradeNow(sessionMode, ts) {
+  if (sessionMode === "all") return true;
   const s = _usSessionOfTs(ts);
   if (s === "closed") return false;
   switch (sessionMode) {
     case "rth":     return s === "rth";
     case "rthPre":  return s === "rth" || s === "pre";
     case "rthPost": return s === "rth" || s === "post";
-    case "all":     return s !== "closed";
     default:        return s === "rth";
   }
 }
