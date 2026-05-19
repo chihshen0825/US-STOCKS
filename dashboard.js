@@ -387,10 +387,14 @@ const _chartInflight = new Map(); // url -> Promise
 const _chartCache    = new Map(); // url -> { ts, value }
 const CHART_FETCH_TTL_MS = 1500;
 // 定期清掉過期條目（每 30s），避免長時間開啟頁面導致 Map 無限增長
-setInterval(() => {
+// v.46: 保留 timer ID 以便 unload 時清掉，避免 dashboard tab 關閉後仍有殘留
+let _chartCacheGcTimer = setInterval(() => {
   const cutoff = Date.now() - CHART_FETCH_TTL_MS * 4;
   for (const [k, v] of _chartCache) if (v.ts < cutoff) _chartCache.delete(k);
 }, 30_000);
+window.addEventListener("beforeunload", () => {
+  if (_chartCacheGcTimer) { clearInterval(_chartCacheGcTimer); _chartCacheGcTimer = null; }
+});
 
 
 // 大盤指數
@@ -424,14 +428,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   initTradingClient();
   renderSimPanel();
   // 每秒重繪 sim 面板，讓「持有時間」與 Live 價格/PnL 持續跳動（只在有 pending/open 時才繪）
+  // v.46: 保留 timer ID 以便 unload 時清掉
   try {
-    setInterval(() => {
+    window._simPanelLiveTimer = setInterval(() => {
       if (!Array.isArray(simTrades) || simTrades.length === 0) return;
       const hasLive = simTrades.some(t => t && (t.status === "pending" || t.status === "open" || t.status === "selling"));
       if (!hasLive) return;
       if (document.hidden) return;
       renderSimPanel();
     }, 1000);
+    window.addEventListener("beforeunload", () => {
+      if (window._simPanelLiveTimer) { clearInterval(window._simPanelLiveTimer); window._simPanelLiveTimer = null; }
+    });
   } catch (_) {}
   renderCatalogEditor();
   // 開啟 popup/tab 時先用上一輪 watchlist 快照即時顯示，背景再刷新真實資料
@@ -2085,8 +2093,12 @@ function _showHotkeyHelp() {
       <div class="hk-help-foot">焦點在輸入框 / 下拉選單時所有熱鍵自動失效，不會干擾打字。</div>
     </div>`;
   document.body.appendChild(pop);
-  pop.querySelector(".hk-help-close")?.addEventListener("click", () => pop.remove());
+  // v.46: 關閉按鈕也要解除 keydown listener（避免重複開關時 listener 累積）
   const onEsc = (ev) => { if (ev.key === "Escape") { pop.remove(); document.removeEventListener("keydown", onEsc, true); } };
+  pop.querySelector(".hk-help-close")?.addEventListener("click", () => {
+    document.removeEventListener("keydown", onEsc, true);
+    pop.remove();
+  });
   document.addEventListener("keydown", onEsc, true);
 }
 
@@ -7729,26 +7741,34 @@ function renderSimPanel() {
   const tbody = document.getElementById("simTbody");
   const statsEl = document.getElementById("simStats");
   if (!tbody) return;
-  const settled = simTrades.filter(t => t.status === "win" || t.status === "loss" || t.status === "unfilled");
-  const wins = settled.filter(t => t.status === "win").length;
-  const filledSettled = settled.filter(t => t.status === "win" || t.status === "loss");
-  const losses = filledSettled.length - wins;
-  const stopHits = filledSettled.filter(t => t.status === "loss" && t.stopHit).length;
-  const timeouts = losses - stopHits;
-  const unfilled = settled.filter(t => t.status === "unfilled").length;
-  const wr = filledSettled.length ? Math.round(wins / filledSettled.length * 100) + "%" : "--";
-  const open = simTrades.filter(t => t.status === "open" || t.status === "selling").length;
-  const pending = simTrades.filter(t => t.status === "pending").length;
-  // 平均持有時間：所有已成交並離場的平均（不只看 win）
-  const allDurs = filledSettled.filter(t => t.exitTime && t.buyTime).map(t => t.exitTime - t.buyTime);
-  const avgDur = allDurs.length ? allDurs.reduce((a,b)=>a+b,0) / allDurs.length : null;
-  // 含手續費的累計淨損益 + 平均淨 %
+  // v.46 perf: 單次掃描代替 7 次 .filter()
+  const settled = [];
+  const filledSettled = [];
+  let wins = 0, stopHits = 0, unfilled = 0, open = 0, pending = 0;
   let netSum = 0, netCount = 0, netSumPct = 0;
-  for (const t of filledSettled) {
-    if (t.buyPrice == null || t.exitPrice == null) continue;
-    const np = _netPnl(t, t.exitPrice);
-    if (np) { netSum += np.net; netSumPct += np.netPct; netCount++; }
+  let durSum = 0, durCount = 0;
+  for (const t of simTrades) {
+    const s = t && t.status;
+    if (s === "win" || s === "loss" || s === "unfilled") {
+      settled.push(t);
+      if (s === "unfilled") unfilled++;
+      else {
+        filledSettled.push(t);
+        if (s === "win") wins++;
+        else if (s === "loss" && t.stopHit) stopHits++;
+        if (t.exitTime && t.buyTime) { durSum += (t.exitTime - t.buyTime); durCount++; }
+        if (t.buyPrice != null && t.exitPrice != null) {
+          const np = _netPnl(t, t.exitPrice);
+          if (np) { netSum += np.net; netSumPct += np.netPct; netCount++; }
+        }
+      }
+    } else if (s === "open" || s === "selling") open++;
+    else if (s === "pending") pending++;
   }
+  const losses = filledSettled.length - wins;
+  const timeouts = losses - stopHits;
+  const wr = filledSettled.length ? Math.round(wins / filledSettled.length * 100) + "%" : "--";
+  const avgDur = durCount ? (durSum / durCount) : null;
   const netAvgPct = netCount ? (netSumPct / netCount) : null;
   const netSumStr = netCount ? (netSum >= 0 ? "+$" + netSum.toFixed(2) : "-$" + Math.abs(netSum).toFixed(2)) : "$0.00";
   const netAvgPctStr = netAvgPct == null ? "--" : ((netAvgPct >= 0 ? "+" : "") + (netAvgPct * 100).toFixed(3) + "%");
