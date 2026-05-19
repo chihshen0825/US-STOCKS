@@ -81,7 +81,7 @@ const PRESETS_THR = {
 // v.22 每個 preset 對應的 simCfg auto-buy 預設值（點 preset 按鈕時同步套用，保留用戶其他客製）
 const PRESETS_SIMCFG = {
   conservative: { requireBreakout: true,  preMarketBuyMode: 'disabled',     wrMin: 0.75, wrMin050: 0.40, wrMax050d: 0.08, gradientLevel: 3, requireHistTurnUp: true,  minVolBurstAuto: 2.5, rsiMaxAuto: 70 },
-  standard:     { requireBreakout: false, preMarketBuyMode: 'breakoutOnly', wrMin: 0.60, wrMin050: 0.35, wrMax050d: 0.10, gradientLevel: 3, requireHistTurnUp: true,  minVolBurstAuto: 2.0, rsiMaxAuto: 75 },
+  standard:     { requireBreakout: false, preMarketBuyMode: 'breakoutOnly', wrMin: 0.60, wrMin050: 0.60, wrMax050d: 0.15, gradientLevel: 1, requireHistTurnUp: true,  minVolBurstAuto: 2.0, rsiMaxAuto: 75 },
   aggressive:   { requireBreakout: false, preMarketBuyMode: 'normal',       wrMin: 0.50, wrMin050: 0.20, wrMax050d: 0.25, gradientLevel: 1, requireHistTurnUp: false, minVolBurstAuto: 0,   rsiMaxAuto: 0  },
 };
 const THR_KEY = "dash_thresholds_v1";
@@ -6457,14 +6457,14 @@ function _logOnce(key, bucketMs, fn) {
 }
 const SIM_DEFAULT_CFG = {
   concurrency: 1,        // 1-256 同時持單上限
-  targetPct: 0.006,      // 0.0001 - 0.012 目標漲幅（v.30 0.4%→0.6%：0.4% 被追價滑點 + 手續費 0.3% 吃掉，不足 cover）
+  targetPct: 0.004,      // 0.0001 - 0.012 目標漲幅（v.39 回 0.4%：實測 0.6% 過難達標、0.4% 仍可 cover 成本 0.179%）
   windowMs: 90 * 60 * 1000, // 1 - 390 分鐘（預設 1h30m）
   wrMin: 0.60,           // wr030 勝率門檻
-  wrMin050: 0.30,        // wr050 勝率門檻
+  wrMin050: 0.60,        // wr050 勝率門檻（v.39 0.30→0.60：實測要求 0.5% 機率也達 60%）
   wrMax050d: 0.15,       // wr050d 賠率「上限」：候選 wr050d > 此值 → 拒絕（保護避免買到下殺機率高的）
   perSymMax: 1,          // 1 = 單一股票不連續下單；>=2 則允許同標的多筆同時持單
   scanIntervalSec: 2,    // 1-60 自動掃描間隔秒數
-  gradientLevel: 3,      // 保護等級 0=不保護 1=wr050≥wr050d 2=wr030≥wr050d 3=wr030≥wr050≥wr050d（預設最保守）
+  gradientLevel: 1,      // 保護等級 0=不保護 1=wr050≥wr050d（v.39 預設）2=wr030≥wr050d 3=wr030≥wr050≥wr050d
   entryMode: 4,          // 買入價格策略：0=目前價 1=中間值 2=建議價 3=追價(起始=建議價) 4=追價(起始=中間值，預設) 5=追價(起始=目前價)
   // 追價模式 (mode 3) 參數：起始為建議價（無則目前價），每 chaseBumpSec 秒未成交就加價，上限為當下市價；總時限 chaseMaxSec 仍未成交則刪單(unfilled)
   chaseBumpSec: 0.1,     // 0.01-60 加價間隔（秒）
@@ -6539,7 +6539,8 @@ const SIM_DEFAULT_CFG = {
   // v8 (2026-05-19): maxEntrySlipPct 0.005→0.002（避免追價滑點吃光 0.4% 目標）；新增 maxBumpCount=5（追價超過 5 次就放棄）
   // v9 (2026-05-19): 根據實戰的 6 筆賠損分析收緊 preset 預設 —— targetPct 0.4%→0.6%、標準 preset wrMin 60%→65% / wrMax050d 15%→10%
   // v10 (2026-05-19): 開盤實測 v9 太緊全擋掉（wr 50-60% 區段被刷掉、開盤跳空 0.2% slip 也被擋）—— 回 wrMin 65%→60%、maxEntrySlipPct 0.002→0.005
-  cfgMigV: 10,
+  // v11 (2026-05-19): 新預設組（依用戶實戰調整）—— targetPct 0.006→0.004、wrMin050 0.30→0.60、gradientLevel 3→1；standard preset 同步：wrMin050 0.35→0.60、wrMax050d 0.10→0.15、gradientLevel 3→1
+  cfgMigV: 11,
 };
 let simTrades = [];
 let simCfg = { ...SIM_DEFAULT_CFG };
@@ -6637,6 +6638,12 @@ function loadSimTrades() {
           if (_curMigV < 10) {
             if (typeof simCfg.wrMin === "number" && simCfg.wrMin === 0.65) simCfg.wrMin = 0.60;
             if (typeof simCfg.maxEntrySlipPct === "number" && simCfg.maxEntrySlipPct <= 0.002) simCfg.maxEntrySlipPct = 0.005;
+          }
+          // v11: 新預設組（用戶實戰調整）——只覆寫仍停留在舊預設值的欄位，保留自訂值
+          if (_curMigV < 11) {
+            if (typeof simCfg.targetPct === "number" && simCfg.targetPct === 0.006) simCfg.targetPct = 0.004;
+            if (typeof simCfg.wrMin050 === "number" && simCfg.wrMin050 === 0.30) simCfg.wrMin050 = 0.60;
+            if (typeof simCfg.gradientLevel === "number" && simCfg.gradientLevel === 3) simCfg.gradientLevel = 1;
           }
           simCfg.cfgMigV = _newMigV;
           // 在 loadSimTrades 完成後的 setTimeout 不來得及，下一次 saveSimCfg 會寫回。為穩鬼主動寫回。
