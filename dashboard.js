@@ -5132,15 +5132,21 @@ function drawWinRate(card, bars) {
   })();
   const FWD_MIN = 10;
   const K = Math.max(1, Math.round(FWD_MIN / _ivMin));
-  const WIN = 20;
+  const WIN = 30;
   const rthOnly = !!(typeof simCfg !== "undefined" && simCfg && simCfg.wrRthOnly);
-  const useBars = (rthOnly && Array.isArray(bars))
-    ? bars.filter(b => b && b.t && (typeof _usSessionOfTs === "function") && _usSessionOfTs(b.t * 1000) === "rth")
-    : (bars || []);
+  const allBars = Array.isArray(bars) ? bars : [];
+  const rthBars = (rthOnly && typeof _usSessionOfTs === "function")
+    ? allBars.filter(b => b && b.t && _usSessionOfTs(b.t * 1000) === "rth")
+    : allBars;
+  // 若啟用 RTH-only 但今日全為盤前/盤後（rthBars 不足以取樣）→ 退回 allBars，避免卡片永遠顯示 --
+  const fellBack = rthOnly && rthBars.length < (K + 2);
+  const useBars = fellBack ? allBars : rthBars;
   // 實際取樣 N（給 tooltip 顯示樣本可信度）
   const N = Math.max(0, Math.min(WIN, useBars.length - K));
   const fwdMin = K * _ivMin;
-  const scopeTxt = rthOnly ? "僅 RTH (09:30–16:00 ET)" : "含盤前+盤中+盤後";
+  const scopeTxt = fellBack
+    ? "RTH-only 啟用但盤前 bar 不足，已退回「混合全時段」"
+    : (rthOnly ? "僅 RTH (09:30–16:00 ET)" : "含盤前+盤中+盤後");
   const tipBase = `卡片勝率（已與下方表格一致）：\n` +
                   `‧ bar 間隔：${_ivMin}m（依 UI 時間框架）\n` +
                   `‧ 前瞻視窗：K=${K} 根 ≈ ${fwdMin} 分鐘\n` +
