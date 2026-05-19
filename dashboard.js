@@ -6321,10 +6321,12 @@ function bindThresholdPanel() {
     } else if (inp instanceof HTMLInputElement && inp.type === "range") {
       const v = parseFloat(inp.value);
       if (Number.isFinite(v)) {
-        simCfg[k] = (k === "wrMin" || k === "wrMin050" || k === "wrMax050d") ? v / 100 : v;
+        simCfg[k] = (k === "wrMin" || k === "wrMin050" || k === "wrMax050d" || k === "maxEntrySlipPct") ? v / 100 : v;
         const out = panel.querySelector(`[data-sim-out="${k}"]`);
         if (out) out.textContent = (k === "minVolBurstAuto") ? (v > 0 ? `×${v.toFixed(1)}` : "關")
                                   : (k === "rsiMaxAuto")     ? (v > 0 ? String(v) : "關")
+                                  : (k === "maxBumpCount")   ? (v > 0 ? `${v} 次` : "關")
+                                  : (k === "maxEntrySlipPct") ? (v > 0 ? `${v.toFixed(2)}%` : "關")
                                   : `${v}%`;
       }
     }
@@ -6340,6 +6342,8 @@ function bindThresholdPanel() {
       const out = panel.querySelector(`[data-sim-out="${k}"]`);
       if (out) out.textContent = (k === "minVolBurstAuto") ? (v > 0 ? `×${v.toFixed(1)}` : "關")
                                 : (k === "rsiMaxAuto")     ? (v > 0 ? String(v) : "關")
+                                : (k === "maxBumpCount")   ? (v > 0 ? `${v} 次` : "關")
+                                : (k === "maxEntrySlipPct") ? (v > 0 ? `${v.toFixed(2)}%` : "關")
                                 : `${v}%`;
     }
   });
@@ -6369,12 +6373,17 @@ function renderThresholdPanel() {
       } else if (el instanceof HTMLSelectElement) {
         if (typeof v === "string") el.value = v;
       } else if (el instanceof HTMLInputElement && el.type === "range") {
-        const pct = (k === "wrMin" || k === "wrMin050" || k === "wrMax050d") ? Math.round((+v || 0) * 100) : +v;
+        let pct;
+        if (k === "wrMin" || k === "wrMin050" || k === "wrMax050d") pct = Math.round((+v || 0) * 100);
+        else if (k === "maxEntrySlipPct") pct = +(((+v || 0) * 100).toFixed(2));
+        else pct = +v;
         if (Number.isFinite(pct)) {
           el.value = String(pct);
           const out = panel.querySelector(`[data-sim-out="${k}"]`);
           if (out) out.textContent = (k === "minVolBurstAuto") ? (pct > 0 ? `×${(+pct).toFixed(1)}` : "關")
                                     : (k === "rsiMaxAuto")     ? (pct > 0 ? String(pct) : "關")
+                                    : (k === "maxBumpCount")   ? (pct > 0 ? `${pct} 次` : "關")
+                                    : (k === "maxEntrySlipPct") ? (pct > 0 ? `${pct.toFixed(2)}%` : "關")
                                     : `${pct}%`;
         }
       }
@@ -6464,8 +6473,11 @@ const SIM_DEFAULT_CFG = {
   extendedFeePct: 0,
   // 進場滑價護欄：實際成交價相對「下單時市價(placedPrice)」的不利偏移超過此值 → 取消下單(unfilled)。
   // 多單(side='up')：buyPx 高於 placedPrice 多少；空單(side='down')：buyPx 低於 placedPrice 多少。
-  // 預設 0.005 (=0.5%)；0 = 關閉護欄。建議 ≥ targetPct，避免勝率基準與實際進場價脫鉤。
-  maxEntrySlipPct: 0.005,
+  // 預設 0.002 (=0.2%)；0 = 關閉護欄。建議 ≤ targetPct 的一半，避免追價滑點吃光獲利空間。
+  maxEntrySlipPct: 0.002,
+  // v.27 追價次數上限：bumpCount ≥ 此值 → 取消下單（避免限價單一路追到當下波段高點再成交）。
+  // 預設 5；0 = 關閉。實測 bumpCount 10+ 的單常買在峰頂，targetPct 0.4% 撐不過追價滑點。
+  maxBumpCount: 5,
   // 勝率計算只取 RTH bars。預設 true：避免盤前/後稀疏 bar 把 wr 算高/低。
   wrRthOnly: true,
   // v.21 起漲點過濾：
@@ -6498,7 +6510,8 @@ const SIM_DEFAULT_CFG = {
   // v5 (2026-05-19): 新增 requireBreakout / preMarketBuyMode='breakoutOnly' / chasedGuardAtrMul=0.8
   // v6 (2026-05-19): 新增 wrMax050d=0.15（-0.5% 賠率上限保護）
   // v7 (2026-05-19): 新增起漲點品質過濾 requireHistTurnUp=true / minVolBurstAuto=2.0 / rsiMaxAuto=75
-  cfgMigV: 7,
+  // v8 (2026-05-19): maxEntrySlipPct 0.005→0.002（避免追價滑點吃光 0.4% 目標）；新增 maxBumpCount=5（追價超過 5 次就放棄）
+  cfgMigV: 8,
 };
 let simTrades = [];
 let simCfg = { ...SIM_DEFAULT_CFG };
@@ -6580,6 +6593,11 @@ function loadSimTrades() {
             simCfg.requireHistTurnUp = true;
             simCfg.minVolBurstAuto = 2.0;
             simCfg.rsiMaxAuto = 75;
+          }
+          // v8: 追價守門收緊 — entry slip 從 0.5% 降到 0.2%；新增 bump 次數上限 5 次
+          if (_curMigV < 8) {
+            simCfg.maxEntrySlipPct = 0.002;
+            simCfg.maxBumpCount = 5;
           }
           simCfg.cfgMigV = _newMigV;
           // 在 loadSimTrades 完成後的 setTimeout 不來得及，下一次 saveSimCfg 會寫回。為穩鬼主動寫回。
@@ -7187,6 +7205,16 @@ function settleSimTradesForSymbol(sym, intra) {
       // 注意：限價必須能「高於」當下市價，否則 strict 模式（intra.price < limit 才成交）永遠不會成交。
       // 若市價跌回限價之下，仍維持原 limit（不主動降價）。
       if (modeAt >= 3 && !isMarketOrder && intra.price >= t.limitPrice) {
+        // v.27 追價次數上限守門：bumpCount 已達上限 → 取消下單，避免一路追到當下波段高點
+        const bumpCap = Math.max(0, +simCfg.maxBumpCount | 0);
+        if (bumpCap > 0 && (t.bumpCount | 0) >= bumpCap) {
+          t.status = "unfilled";
+          t.exitTime = now;
+          t.exitReason = `追價 ${t.bumpCount} 次 ≥ 上限 ${bumpCap}，取消下單`;
+          _logSim("reject-bump", t.sym, `取消追價：bumpCount ${t.bumpCount} ≥ 上限 ${bumpCap}（避免追到爆，市價 ${intra.price.toFixed(2)} vs 原下單 ${(t.placedPrice||0).toFixed(2)}）`, { id: t.id, src: t.source });
+          changed = true;
+          continue;
+        }
         const bumpMs = t.chaseBumpMs || 10000;
         const baseStep = t.chaseStepPx || 0.01;
         // 狂飄判定：「市價 - 限價」 / 限價 ≥ panicGapPct。觸發則跳過 bumpMs 節流、step × mul、並強制限價跳到市價 + tick

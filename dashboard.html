@@ -196,6 +196,14 @@
           <input type="range" data-sim="rsiMaxAuto" min="0" max="95" step="1">
           <output data-sim-out="rsiMaxAuto"></output>
         </label>
+        <label class="threshold-row"><span title="追價次數上限：限價單被市價推升後加價的次數累計達此值 → 立即取消下單。&#10;&#10;用途：避免「追到爆」— 實測 bumpCount 10+ 的單常買在當下波段高點，0.4% target 根本撐不過追價滑點。&#10;&#10;預設 5；設 0 = 關閉（不限制追價次數）。">追價次數上限</span>
+          <input type="range" data-sim="maxBumpCount" min="0" max="30" step="1">
+          <output data-sim-out="maxBumpCount"></output>
+        </label>
+        <label class="threshold-row"><span title="進場滑價上限 (%)：實際成交價相對下單時市價的不利偏移超過此值 → 取消成交（unfilled）。&#10;&#10;用途：第二道防線 — 即使追價未達次數上限，若最終成交價已嚴重偏離下單時點（勝率基準），也拒收。&#10;&#10;預設 0.20%；建議設為 targetPct 的一半以下（target 0.4% → cap 0.2%）。設 0 = 關閉。">進場滑價上限 (%)</span>
+          <input type="range" data-sim="maxEntrySlipPct" min="0" max="1" step="0.05">
+          <output data-sim-out="maxEntrySlipPct"></output>
+        </label>
       </div>
     </div>
     <div class="settings-actions">
