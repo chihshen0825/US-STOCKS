@@ -2877,7 +2877,7 @@ function renderQuick(card, sym, intra) {
   setOHL(".ohl-prevL",  intra.prevLow,   basePrev);
   setOHL(".ohl-prevC",  intra.prevClose, basePrev);
   drawSpark(card.querySelector(".spark"), intra.bars.slice(-barCount), intra.prevClose, computeLevels(intra));
-  drawWinRate(card, intra.bars);
+  drawWinRate(card, intra.bars, sym);
   bindWrMiniClicks(card, sym);
   bindWsTestButton(card, sym);
   // 盤前/盤後：intra.price = meta.regularMarketPrice 會凍結在昨收，會讓 settle 拿到「昨日價」誤觸 target。
@@ -5125,7 +5125,11 @@ function winRateDownPct(bars, target, K = 10, WIN = 30) {
   return tail.filter(v => v === 1).length / tail.length;
 }
 
-function drawWinRate(card, bars) {
+function drawWinRate(card, bars, sym) {
+  // 優先讀 wlData row 上的 wr030/wr050/wr050d（與下方表格同一來源 _d1Bars，含多日 1m + RTH 過濾）。
+  // 避免卡片只拿今日 intra.bars（盤前/盤後樣本少）與表格數字脫鉤。
+  const _row = (sym && typeof wlData !== "undefined") ? wlData.get(sym) : null;
+  const _hasRow = _row && (_row.wr030 != null || _row.wr050 != null || _row.wr050d != null);
   // C：與下方 watchlist 表格統一參數
   //   ‧ 目標前瞻時間視窗：10 分鐘
   //   ‧ K = round(10 / intervalMin)；intervalMin 依 UI timeframe 決定（1m→K=10、5m→K=2、15m→K=1）
@@ -5176,9 +5180,9 @@ function drawWinRate(card, bars) {
     el.style.color = tint(ramp, pct);
     el.setAttribute("title", tip);
   };
-  setPct(".wr-v-030",  winRatePct(useBars, 0.003, K, WIN),     RED, `+0.3% 勝率：${fwdMin} 分鐘內漲幅 ≥ 0.3% 的歷史比例`);
-  setPct(".wr-v-050",  winRatePct(useBars, 0.005, K, WIN),     RED, `+0.5% 勝率：${fwdMin} 分鐘內漲幅 ≥ 0.5% 的歷史比例`);
-  setPct(".wr-v-050d", winRateDownPct(useBars, 0.005, K, WIN), GRN, `-0.5% 賠率：${fwdMin} 分鐘內跌幅 ≥ 0.5% 的歷史比例`);
+  setPct(".wr-v-030",  _hasRow ? _row.wr030  : winRatePct(useBars, 0.003, K, WIN),     RED, `+0.3% 勝率：${fwdMin} 分鐘內「先觸 +0.3% 而未先破 -0.3%」的歷史機率` + (_hasRow ? `\n來源：表格 (${_row.wrSrc || "1m"}${_row.wrScope === "rth" ? " R" : ""})、樣本 N=${_row.wrN030 ?? "?"}` : ""));
+  setPct(".wr-v-050",  _hasRow ? _row.wr050  : winRatePct(useBars, 0.005, K, WIN),     RED, `+0.5% 勝率：${fwdMin} 分鐘內「先觸 +0.5% 而未先破 -0.5%」的歷史機率` + (_hasRow ? `\n來源：表格 (${_row.wrSrc || "1m"}${_row.wrScope === "rth" ? " R" : ""})、樣本 N=${_row.wrN050 ?? "?"}` : ""));
+  setPct(".wr-v-050d", _hasRow ? _row.wr050d : winRateDownPct(useBars, 0.005, K, WIN), GRN, `-0.5% 賠率：${fwdMin} 分鐘內「先破 -0.5% 而未先觸 +0.5%」的歷史機率` + (_hasRow ? `\n來源：表格 (${_row.wrSrc || "1m"}${_row.wrScope === "rth" ? " R" : ""})、樣本 N=${_row.wrN050d ?? "?"}` : ""));
   // 在 % 下方列出對應的目標股價（優先以卡片上的即時報價為基準，否則退回 bars 最後收盤）
   const priceEl = card.querySelector(".price");
   const livePx = parseFloat((priceEl?.textContent || "").replace(/[^0-9.\-]/g, ""));
