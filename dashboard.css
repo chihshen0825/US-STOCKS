@@ -370,7 +370,7 @@ button.ghost  { color: #9aa0a6; }
   position: relative; overflow: visible;
   transition: border-color .2s, transform .12s;
 }
-/* 左上角索引徽章（對應快捷鍵 1~9） */
+/* 左上角索引徽章（對應快捷鍵 1~9）；v.47 同時是唯一拖曳扊手 */
 .card .card-idx {
   position: absolute;
   top: -8px; left: -8px;
@@ -388,7 +388,9 @@ button.ghost  { color: #9aa0a6; }
   pointer-events: auto;
   user-select: none;
   line-height: 1;
+  cursor: grab;
 }
+.card .card-idx:active { cursor: grabbing; }
 .card:hover .card-idx { background: linear-gradient(135deg, #80d8ff 0%, #42a5f5 100%); }
 .card:hover { border-color: #3a4250; transform: translateY(-1px); }
 .card[draggable="true"] { cursor: grab; }

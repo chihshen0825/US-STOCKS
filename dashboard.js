@@ -1696,27 +1696,19 @@ function buildGrid() {
     card.dataset.symbol = sym;
     card.dataset.idx = String(i + 1);
     // 左上角索引徽章（對應快捷鍵 1~9 跳到該卡片）
+    // v.47: badge 同時是唯一的拖曳扊手——其他區域不會觸發拖曳，產生即拖（無 400ms 長按）
     const idxBadge = document.createElement("span");
     idxBadge.className = "card-idx";
     idxBadge.textContent = String(i + 1);
-    idxBadge.title = `快捷鍵：${i + 1}（跳到此卡片）`;
+    idxBadge.draggable = true;
+    idxBadge.title = `快捷鍵 ${i + 1}（跳到此卡片）。拖曳此球可重新排序，拖到刷下区可移除。`;
     card.appendChild(idxBadge);
     card.querySelector(".sym").textContent = sym;
     card.classList.add("loading");
-    // draggable 只在「排序模式」下開啟，避免與 hover tooltip 衝突
     grid.appendChild(node);
   });
   bindCardDrag(grid);
-  bindCardLongPress(grid);
   bindGridDrop(grid);
-  // 若使用者仍在排序模式（剛才 reorder 完重建 grid），保持 draggable + 暫停 tooltip
-  if (_sortMode) {
-    grid.querySelectorAll(".card").forEach(c => c.setAttribute("draggable", "true"));
-    grid.querySelectorAll("[title]").forEach(el => {
-      el.dataset.savedTitle = el.getAttribute("title");
-      el.removeAttribute("title");
-    });
-  }
   toggleGridEmptyHint(grid);
 }
 
@@ -1868,9 +1860,20 @@ if (typeof window !== "undefined" && !window.__sortModeGlobalBound) {
 function bindCardDrag(grid) {
   grid.querySelectorAll(".card").forEach(card => {
     card.addEventListener("dragstart", (e) => {
+      // v.47: 只接受從左上角索引球 .card-idx 發起的拖曳，其他區域一律不拖
+      if (!e.target || !e.target.classList || !e.target.classList.contains("card-idx")) {
+        e.preventDefault();
+        return;
+      }
       _dragSrc = { type: "card", sym: card.dataset.symbol };
       card.classList.add("dragging");
-      try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", _dragSrc.sym); } catch(_) {}
+      try {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", _dragSrc.sym);
+        // 以整張卡片作為拖曳預覽，避免使用者只看到一個小圓球
+        const r = card.getBoundingClientRect();
+        e.dataTransfer.setDragImage(card, e.clientX - r.left, e.clientY - r.top);
+      } catch(_) {}
     });
     card.addEventListener("dragend", () => {
       _dragSrc = null;
