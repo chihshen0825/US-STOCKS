@@ -8546,6 +8546,81 @@ if (sh)   sh.value   = String(simCfg.amountPerTradeUsd);
       });
   });
 
+  // ===== 標的欄 hover：浮動視窗顯示對應「卡片」內容 =====
+  (() => {
+    const tbody = document.getElementById("simTbody");
+    if (!tbody) return;
+    let pop = null, curSym = null, closeTimer = 0;
+    function _hide() {
+      if (closeTimer) { clearTimeout(closeTimer); closeTimer = 0; }
+      if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
+      pop = null; curSym = null;
+    }
+    function _scheduleHide() {
+      if (closeTimer) clearTimeout(closeTimer);
+      closeTimer = setTimeout(_hide, 180);
+    }
+    function _show(sym, anchorRect) {
+      _hide();
+      pop = document.createElement("div");
+      pop.className = "sim-sym-popover";
+      const src = document.querySelector(`.card[data-symbol="${sym}"]`);
+      if (src) {
+        const clone = src.cloneNode(true);
+        clone.removeAttribute("draggable");
+        clone.querySelectorAll("button, input").forEach(el => { el.disabled = true; });
+        // 顯示用：避免拖曳 / 點擊衍生副作用
+        clone.style.pointerEvents = "auto";
+        pop.appendChild(clone);
+      } else {
+        const div = document.createElement("div");
+        div.className = "sim-sym-popover-empty";
+        div.innerHTML = `⚠️ <b>${sym}</b> 不在卡片區<br><span>請將該標的拖入「工作」或「自選」頁籤，即可在此即時預覽行情、訊號、新聞與 K 線。</span>`;
+        pop.appendChild(div);
+      }
+      // 進入彈窗本身時取消關閉
+      pop.addEventListener("mouseenter", () => { if (closeTimer) { clearTimeout(closeTimer); closeTimer = 0; } });
+      pop.addEventListener("mouseleave", _scheduleHide);
+      document.body.appendChild(pop);
+      // 定位（先放右側，越界時翻到左側 / 上下夾住視窗）
+      const r = anchorRect;
+      const pw = pop.offsetWidth, ph = pop.offsetHeight;
+      const vw = window.innerWidth, vh = window.innerHeight;
+      let left = r.right + 8;
+      if (left + pw + 8 > vw) left = Math.max(8, r.left - pw - 8);
+      let top  = r.top + (r.height / 2) - (ph / 2);
+      if (top < 8) top = 8;
+      if (top + ph + 8 > vh) top = Math.max(8, vh - ph - 8);
+      pop.style.left = left + "px";
+      pop.style.top  = top  + "px";
+      curSym = sym;
+    }
+    tbody.addEventListener("mouseover", (ev) => {
+      const td = ev.target.closest("td.sim-sym");
+      if (!td) return;
+      const tr = td.closest("tr[data-trade-id]");
+      if (!tr) return;
+      const t = simTrades.find(x => String(x.id) === String(tr.dataset.tradeId));
+      const sym = t?.sym;
+      if (!sym) return;
+      if (sym === curSym) {
+        if (closeTimer) { clearTimeout(closeTimer); closeTimer = 0; }
+        return;
+      }
+      _show(sym, td.getBoundingClientRect());
+    });
+    tbody.addEventListener("mouseout", (ev) => {
+      const td = ev.target.closest("td.sim-sym");
+      if (!td) return;
+      const to = ev.relatedTarget;
+      if (to && (td.contains(to) || (pop && (to === pop || pop.contains(to))))) return;
+      _scheduleHide();
+    });
+    // 滾動 / resize 時收掉彈窗，避免位置錯亂
+    window.addEventListener("scroll", _hide, true);
+    window.addEventListener("resize", _hide);
+  })();
+
   // ===== 分組「↶ 預設」按鈕：只重設該類別的欄位 =====
   const GROUP_KEYS = {
     entry:    ["concurrency", "targetPct", "trailingStopPct", "windowMs", "wrMin", "wrMin050", "wrMax050d", "perSymMax", "gradientLevel"],

@@ -1803,7 +1803,38 @@ tr.row-hot td.sym { color: #ff7043; font-weight: 700; }
 .sim-table th.num, .sim-table td.num { text-align: right; }
 .sim-table tbody td { padding: 7px 12px; border-bottom: 1px solid #1f242c; color: #cfd8dc; white-space: nowrap; }
 .sim-table tbody tr:hover { background: rgba(255,255,255,0.03); }
-.sim-table .sim-sym { font-weight: 700; color: #4fc3f7; }
+.sim-table .sim-sym { font-weight: 700; color: #4fc3f7; cursor: help; }
+.sim-table .sim-sym:hover { text-decoration: underline dotted; }
+
+/* ===== sim 表「標的」欄 hover 浮動視窗（顯示對應卡片副本）===== */
+.sim-sym-popover {
+  position: fixed;
+  z-index: 9999;
+  background: #0f1115;
+  border: 1px solid #2a3140;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+  padding: 8px;
+  max-width: 520px;
+  max-height: 80vh;
+  overflow: auto;
+  pointer-events: auto;
+}
+.sim-sym-popover .card {
+  margin: 0;
+  width: 480px;
+  transform: scale(0.92);
+  transform-origin: top left;
+}
+.sim-sym-popover-empty {
+  width: 320px;
+  padding: 16px 18px;
+  color: #cfd8dc;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.sim-sym-popover-empty b { color: #4fc3f7; }
+.sim-sym-popover-empty span { color: #90a4ae; font-size: 12px; }
 .sim-table .sim-up   { color: #ef5350; font-weight: 600; }
 .sim-table .sim-down { color: #26c6a0; font-weight: 600; }
 .sim-table .sim-status { font-weight: 600; }
