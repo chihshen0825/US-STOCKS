@@ -6201,6 +6201,10 @@ const SIM_DEFAULT_CFG = {
   sessionMode: "rth",
   // 盤前/盤後額外手續費（分數形式，0.0005 = 0.05%），預設 0 = 不加（避免默默吞掉 1/3 目標獲利）
   extendedFeePct: 0,
+  // 進場滑價護欄：實際成交價相對「下單時市價(placedPrice)」的不利偏移超過此值 → 取消下單(unfilled)。
+  // 多單(side='up')：buyPx 高於 placedPrice 多少；空單(side='down')：buyPx 低於 placedPrice 多少。
+  // 預設 0.005 (=0.5%)；0 = 關閉護欄。建議 ≥ targetPct，避免勝率基準與實際進場價脫鉤。
+  maxEntrySlipPct: 0.005,
   // 勝率計算只取 RTH bars。預設 true：避免盤前/後稀疏 bar 把 wr 算高/低。
   wrRthOnly: true,
   // 執行模式：0 = 本地模擬（1 = WS 實交
@@ -6210,7 +6214,8 @@ const SIM_DEFAULT_CFG = {
   // 一次性預設 migration 版本：當載入的舊 cfg cfgMigV < 此值時，會強制套用「新預設」到指定欄位並升位。
   // v2 (2026-05-19): wrRthOnly→false, extendedFeePct→0
   // v3 (2026-05-19): wrRthOnly→true（配合 first-touch 勝率演算法重計，避免盤前稀疏 bar 遭志）
-  cfgMigV: 3,
+  // v4 (2026-05-19): maxEntrySlipPct→0.005（追價成交遠離下單時市價時取消，避免追高）
+  cfgMigV: 4,
 };
 let simTrades = [];
 let simCfg = { ...SIM_DEFAULT_CFG };
@@ -6276,6 +6281,10 @@ function loadSimTrades() {
           // v3: 配合 first-touch 勝率演算法，「勝率只用盤中」強制開啟（避免盤前稀疏 bar 遭志）
           if (_curMigV < 3) {
             simCfg.wrRthOnly = true;
+          }
+          // v4: 進場滑價護欄預設 0.005 (0.5%)，避免追高後進場價與 WR 基準脫鉤
+          if (_curMigV < 4) {
+            simCfg.maxEntrySlipPct = 0.005;
           }
           simCfg.cfgMigV = _newMigV;
           // 在 loadSimTrades 完成後的 setTimeout 不來得及，下一次 saveSimCfg 會寫回。為穩鬼主動寫回。
@@ -6922,6 +6931,22 @@ function settleSimTradesForSymbol(sym, intra) {
       else if (fm === 'optimistic' && intra.price <= t.limitPrice) { filled = true; buyPx = intra.price; }
       else if (fm === 'strict' && intra.price < t.limitPrice) { filled = true; buyPx = t.limitPrice; }
       if (filled) {
+        // 進場滑價護欄：實際成交價相對下單時市價的「不利」偏移超過 maxEntrySlipPct → 視為失敗成交
+        // 多單：buyPx 高於 placedPrice 為不利；空單：buyPx 低於 placedPrice 為不利
+        const slipDir = (t.side === "down") ? -1 : +1;
+        const slipPct = (t.placedPrice && isFinite(t.placedPrice) && t.placedPrice > 0)
+          ? ((buyPx - t.placedPrice) / t.placedPrice) * slipDir
+          : 0;
+        t.entrySlipPct = slipPct; // 永遠記錄（含負值=有利）
+        const slipCap = Math.max(0, +simCfg.maxEntrySlipPct || 0);
+        if (slipCap > 0 && slipPct > slipCap) {
+          t.status = "unfilled";
+          t.exitTime = now;
+          t.exitReason = `進場滑價 ${(slipPct*100).toFixed(2)}% > 上限 ${(slipCap*100).toFixed(2)}%`;
+          _logSim("reject-slip", t.sym, `取消下單：成交價 ${buyPx.toFixed(2)} vs 下單時市價 ${t.placedPrice.toFixed(2)} 偏移 ${(slipPct*100).toFixed(2)}% > 上限 ${(slipCap*100).toFixed(2)}%`, { id: t.id, src: t.source });
+          changed = true;
+          continue;
+        }
         t.status = "open";
         t.buyTime = now;
         t.buyPrice = buyPx;
@@ -7279,8 +7304,17 @@ function renderSimPanel() {
       if (np) exitNetTitle = `title="混 PnL=${np.net>=0?'+':''}$${np.net.toFixed(2)} (${(np.netPct*100).toFixed(3)}%)、手續費 $${np.fee.toFixed(2)}"`;
     }
     const isFilled = t.buyPrice != null;
+    const _slipBadge = (() => {
+      if (!isFilled || t.entrySlipPct == null || !isFinite(t.entrySlipPct)) return "";
+      const sp = +t.entrySlipPct;
+      if (Math.abs(sp) < 0.0005) return ""; // 小於 0.05% 不顯示
+      const sign = sp > 0 ? "+" : "";
+      const cls = sp > 0.005 ? "sim-slip-bad" : sp > 0.002 ? "sim-slip-warn" : "sim-slip-ok";
+      const lbl = sp > 0 ? "不利" : "有利";
+      return ` <span class="sim-slip ${cls}" title="進場滑價：成交 ${(t.buyPrice||0).toFixed(2)} vs 下單時市價 ${(t.placedPrice||0).toFixed(2)} = ${sign}${(sp*100).toFixed(2)}%（對交易方向${lbl}）&#10;WR 是基於下單時市價的歷史機率，滑價過大會讓 WR 失效">滑${sign}${(sp*100).toFixed(2)}%</span>`;
+    })();
     const buyTimeStr = isFilled
-      ? `${_simFmtClock(t.buyTime)} <span class="sim-time-px" title="成交當下價格">@${t.buyPrice.toFixed(2)}</span>`
+      ? `${_simFmtClock(t.buyTime)} <span class="sim-time-px" title="成交當下價格">@${t.buyPrice.toFixed(2)}</span>${_slipBadge}`
       : `<span class="sim-pending-time" title="下單時間 ${_simFmtClock(t.placedTime)}；下單時市價 ${(t.placedPrice ?? 0).toFixed(2)}">📤 ${_simFmtClock(t.placedTime)} <span class="sim-time-px">@${(t.placedPrice ?? 0).toFixed(2)}</span></span>`;
     const buyPriceStr = isFilled
       ? t.buyPrice.toFixed(2)
@@ -7572,7 +7606,8 @@ function _buildSimTradesCsv(opts) {
     "holdMs","windowMs",
     "suggestPx","low10","low30","low60","lowAll",
     "wr030At","wr050At","wr050dAt",
-    "bumpCount","chaseStepPx","chaseBumpMs"
+    "bumpCount","chaseStepPx","chaseBumpMs",
+    "entrySlipPct"
   ];
   const _iso = ts => ts ? new Date(ts).toISOString() : "";
   const _exitReason = (t) =>
@@ -7616,6 +7651,7 @@ function _buildSimTradesCsv(opts) {
       low10: _num(t.low10), low30: _num(t.low30), low60: _num(t.low60), lowAll: _num(t.lowAll),
       wr030At: _num(t.wr030At), wr050At: _num(t.wr050At), wr050dAt: _num(t.wr050dAt),
       bumpCount: _num(t.bumpCount), chaseStepPx: _num(t.chaseStepPx), chaseBumpMs: _num(t.chaseBumpMs),
+      entrySlipPct: _num(t.entrySlipPct),
     };
     return headers.map(h => _esc(row[h])).join(",");
   });
