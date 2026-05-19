@@ -3525,14 +3525,25 @@ async function computeWatchlistRow(sym, name) {
     const _p = row.pre.price;
     row.pre = { ...row.pre, change: _p - prev, changePct: ((_p - prev) / prev) * 100 };
   }
-  // Stale quote 偵測：日漲跌絕對值 > 8% 但近 5 分鐘最大波動 < 0.5%（沒有對應的分時 bar 支撐），
+  // Stale quote 偵測：日漲跌絕對值 > 4% 但近 5 分鐘最大波動 < 0.5%（沒有對應的分時 bar 支撐），
   // 或 52w 位階 raw 超出 [-5, 105]（突破年高/低又無波動配合）→ 標 staleSuspect，UI 顯示 ⚠。
+  // v.29 收緊 8%→4%：ESGV 類型的 +5% 虛高 quote 無法同步內在分時。
   const _m5Up = typeof row.mom5Pct === "number" ? row.mom5Pct : 0;
   const _m5Dn = typeof row.mom5DownPct === "number" ? row.mom5DownPct : 0;
-  const _bigChg = typeof row.chgPct === "number" && Math.abs(row.chgPct) > 8;
+  const _bigChg = typeof row.chgPct === "number" && Math.abs(row.chgPct) > 4;
   const _flatBars = Math.abs(_m5Up) < 0.5 && Math.abs(_m5Dn) < 0.5;
   const _outOf52w = row.pos52wRaw != null && (row.pos52wRaw > 105 || row.pos52wRaw < -5);
-  if ((_bigChg && _flatBars) || _outOf52w) row.staleSuspect = true;
+  if ((_bigChg && _flatBars) || _outOf52w) {
+    row.staleSuspect = true;
+    // v.29 偵到 stale → 強制訊號改 HOLD，避免顯示 BUY/SELL 誤導使用者手動進場髒資料
+    const _holdReason = `偵到 stale quote：${_outOf52w ? `52w 位階 ${row.pos52wRaw.toFixed(1)}% 越界` : `日漲跌 ${row.chgPct.toFixed(1)}% 但 5m bar 無波動`}→強制 HOLD`;
+    row.label1 = "HOLD"; row.cls1 = "signal-hold"; row.score1 = 0; row.score1Raw = 0;
+    row.sig1Reasons = [_holdReason]; row.sig1Scores = [0];
+    row.label5 = "HOLD"; row.cls5 = "signal-hold"; row.score5 = 0; row.score5Raw = 0;
+    row.sig5Reasons = [_holdReason]; row.sig5Scores = [0];
+    if (row.label15) { row.label15 = "HOLD"; row.cls15 = "signal-hold"; row.score15 = 0; }
+    if (row.confluenceLabel) { row.confluenceLabel = "HOLD"; row.confluenceCls = "signal-hold"; row.confluenceCount = 0; }
+  }
   // 勝率：優先 1m（K=10 ≈ 10 分鐘）；盤前/早盤 1m bar 不足時 fallback 用 5m（K=2 ≈ 10 分鐘）
   // 5m fallback：K=3 根 ≈ 真 15 分鐘；WIN=12 對應近 ±60 分鐘。
   // （原本 WIN=40 跳回三天前，記憶太長、隻 wr 變楫家，兩見偏 0% / 100%。）
@@ -9042,6 +9053,7 @@ async function runSimAutoScan(force) {
   // v.26 診斷模式：將 filter 拆成「逐項評估，回傳第一個拒絕原因」→ 可彙總顯示為什麼 0 候選
   const _reject = (r) => {
     if (!r || typeof r.wr030 !== "number" || typeof r.wr050 !== "number" || typeof r.wr050d !== "number") return "❌ 缺資料 (wr030/050/050d)";
+    if (r.staleSuspect) return "❌ stale quote 嫀疑 (⚠)";
     if (r.wr030 < simCfg.wrMin) return `❌ wr030 ${(r.wr030*100|0)}% < ${(simCfg.wrMin*100|0)}%`;
     if (r.wr050 < simCfg.wrMin050) return `❌ wr050 ${(r.wr050*100|0)}% < ${(simCfg.wrMin050*100|0)}%`;
     if ((+simCfg.wrMax050d || 0) > 0 && r.wr050d > simCfg.wrMax050d) return `❌ wr050d ${(r.wr050d*100|0)}% > 上限 ${(simCfg.wrMax050d*100|0)}%`;
