@@ -9174,8 +9174,72 @@ async function runSimAutoScan(force) {
   // v.26 診斷模式：把詳細拒絕原因寫入 console（每次 scan）+ 試單日誌（每次 scan，去重 30s）
   if (simCfg.debugScan && candidates.length === 0 && rejectBreakdown.length) {
     try { console.log("[sim debug] 0 候選 — 拒絕原因 breakdown:\n  " + rejectBreakdown.join("\n  ")); } catch {}
+    // v.33 找「最接近通過」的標的：列出全部不符項與如何調設定可以買到
+    let bestRejectInfo = null;
+    try {
+      const _rejectAll = (r) => {
+        const fails = [];
+        if (!r || typeof r.wr030 !== "number" || typeof r.wr050 !== "number" || typeof r.wr050d !== "number") return null;
+        if (r.staleSuspect) fails.push("stale quote 嫌疑（等下次報價刷新）");
+        if (r.wr030 < simCfg.wrMin) fails.push(`wr030 ${(r.wr030*100|0)}% < ${(simCfg.wrMin*100|0)}% → wrMin 降到 ${(Math.floor(r.wr030*100)/100).toFixed(2)}`);
+        if (r.wr050 < simCfg.wrMin050) fails.push(`wr050 ${(r.wr050*100|0)}% < ${(simCfg.wrMin050*100|0)}% → wrMin050 降到 ${(Math.floor(r.wr050*100)/100).toFixed(2)}`);
+        if ((+simCfg.wrMax050d || 0) > 0 && r.wr050d > simCfg.wrMax050d) fails.push(`wr050d ${(r.wr050d*100|0)}% > ${(simCfg.wrMax050d*100|0)}% → wrMax050d 升到 ${(Math.ceil(r.wr050d*100)/100).toFixed(2)}`);
+        if ((+simCfg.minPriceUsd || 0) > 0) {
+          const px = (typeof r.price === "number" && r.price > 0) ? r.price : null;
+          if (px !== null && px < simCfg.minPriceUsd) fails.push(`股價 $${px.toFixed(2)} < $${simCfg.minPriceUsd} → minPriceUsd 降到 ${Math.max(0, Math.floor(px))}`);
+        }
+        const lv = Math.max(0, Math.min(3, simCfg.gradientLevel | 0));
+        if (lv === 1 && !(r.wr050 >= r.wr050d)) fails.push("保護L1 wr050<wr050d → gradientLevel 改 0");
+        if (lv === 2 && !(r.wr030 >= r.wr050d)) fails.push("保護L2 wr030<wr050d → gradientLevel 改 1 或 0");
+        if (lv === 3 && !(r.wr030 >= r.wr050 && r.wr050 >= r.wr050d)) fails.push(`保護L3 階梯不符 (${(r.wr030*100|0)}/${(r.wr050*100|0)}/${(r.wr050d*100|0)}) → gradientLevel 改 2/1/0`);
+        if ((openBySym.get(r.sym) || 0) >= perSymMax) fails.push(`同股已達 perSymMax ${perSymMax} → perSymMax 升到 ${perSymMax+1}`);
+        const brk = r.brk;
+        if (simCfg.requireHistTurnUp && !(brk && (brk.histTurnUp || brk.retest))) fails.push("MACD-H 未翻紅 → 關閉 requireHistTurnUp");
+        if ((+simCfg.minVolBurstAuto || 0) > 0 && !(brk && brk.volRatio >= simCfg.minVolBurstAuto)) fails.push(`量比 ×${brk?.volRatio?.toFixed(1) ?? "?"} < ×${simCfg.minVolBurstAuto} → minVolBurstAuto 降到 ${(Math.max(0, (brk?.volRatio || 0))).toFixed(1)}`);
+        if ((+simCfg.rsiMaxAuto || 0) > 0 && typeof r.rsi5 === "number" && r.rsi5 > simCfg.rsiMaxAuto) fails.push(`RSI ${r.rsi5.toFixed(0)} > ${simCfg.rsiMaxAuto} → rsiMaxAuto 升到 ${Math.ceil(r.rsi5)}`);
+        const pmMode = simCfg.preMarketBuyMode || 'normal';
+        if (pmMode !== 'normal' && typeof _usSessionOfTs === 'function') {
+          const sess = _usSessionOfTs(Date.now());
+          if (sess !== 'rth') {
+            if (pmMode === 'disabled') fails.push(`盤前/後 disabled (sess=${sess}) → preMarketBuyMode 改 normal/breakoutOnly`);
+            else if (pmMode === 'breakoutOnly' && !(brk && (brk.breakout || brk.retest))) fails.push(`盤前/後 breakoutOnly 未突破 (sess=${sess}) → preMarketBuyMode 改 normal`);
+          }
+        }
+        if (simCfg.requireBreakout && !(brk && (brk.breakout || brk.retest))) fails.push("requireBreakout 未突破 → 關閉 requireBreakout");
+        const guard = (typeof THR !== "undefined" && +THR.chasedGuardMul) || +simCfg.chasedGuardAtrMul || 0;
+        if (guard > 0 && brk && brk.atrPct != null && brk.distToHigh20Pct != null && brk.distToHigh20Pct > brk.atrPct * guard) {
+          fails.push(`追高 距20H ${brk.distToHigh20Pct.toFixed(2)}% > ATR ${brk.atrPct.toFixed(2)}% ×${guard} → chasedGuardAtrMul 升到 ${(brk.distToHigh20Pct/brk.atrPct).toFixed(2)} 或設 0`);
+        }
+        return fails;
+      };
+      // 評分：fewest fails → highest wr030 → highest wr050
+      let bestRow = null, bestFails = null;
+      for (const r of rows) {
+        const fails = _rejectAll(r);
+        if (!fails || !fails.length) continue;
+        if (!bestRow
+            || fails.length < bestFails.length
+            || (fails.length === bestFails.length && r.wr030 > bestRow.wr030)
+            || (fails.length === bestFails.length && r.wr030 === bestRow.wr030 && r.wr050 > bestRow.wr050)) {
+          bestRow = r; bestFails = fails;
+        }
+      }
+      if (bestRow) {
+        bestRejectInfo = {
+          sym: bestRow.sym,
+          wr: `${(bestRow.wr030*100|0)}/${(bestRow.wr050*100|0)}/${(bestRow.wr050d*100|0)}`,
+          fails: bestFails,
+        };
+      }
+    } catch (e) { try { console.warn("[sim debug] bestRejectAll error", e); } catch {} }
+
     _logOnce("auto-scan-debug-empty", 30_000, () => {
       _logSim("reject", "—", `🔍 掃描 ${rows.length} 檔 → 0 候選`, { top: rejectBreakdown.slice(0, 3).join(" | ") });
+      if (bestRejectInfo) {
+        const note = `${bestRejectInfo.sym} (wr030/050/050d=${bestRejectInfo.wr}) 缺 ${bestRejectInfo.fails.length} 項: ` + bestRejectInfo.fails.join(" | ");
+        _logSim("reject", bestRejectInfo.sym, `🎯 最接近通過`, { 調整建議: note });
+        try { console.log("[sim debug] 最接近通過:", note); } catch {}
+      }
     });
   }
   // 每 30 秒輸出一次 top 候選（每次 scan 都印太吵）
