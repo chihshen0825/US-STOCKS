@@ -53,6 +53,8 @@ jobs:
           zip -r "$OUT" . \
             -x ".git/*" ".github/*" \
                "TechAnalysisAPI_Sample/*" \
+               "TradingService/*" \
+               "PROTOCOL.md" \
                "*.zip" \
                ".gitignore"
           ls -la "$OUT"

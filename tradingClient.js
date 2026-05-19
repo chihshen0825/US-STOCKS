@@ -6,6 +6,10 @@
 //   - on(event, fn)  event: 'open' | 'close' | 'error' | 'trade_update' | 'message'
 (function () {
   const DEFAULT_URL = "ws://127.0.0.1:1088/";
+  const HEARTBEAT_MS = 25_000;     // ping interval（< server idle timeout）
+  const HEARTBEAT_TIMEOUT_MS = 8_000;
+  const RECONNECT_MIN_MS = 2_000;
+  const RECONNECT_MAX_MS = 30_000;
   const listeners = { open: [], close: [], error: [], trade_update: [], message: [] };
   const pending = new Map(); // req_id -> {resolve,reject,timer}
   let ws = null;
@@ -13,6 +17,8 @@
   let url = DEFAULT_URL;
   let reconnect = true;
   let reconnectTimer = null;
+  let reconnectBackoff = RECONNECT_MIN_MS;
+  let heartbeatTimer = null;
 
   function emit(ev, payload) {
     const arr = listeners[ev]; if (!arr) return;
@@ -30,10 +36,16 @@
     try { ws = new WebSocket(url); }
     catch (e) { emit("error", e); scheduleReconnect(); return; }
 
-    ws.onopen = () => { console.log("[ws] open", url); emit("open"); };
+    ws.onopen = () => {
+      console.log("[ws] open", url);
+      reconnectBackoff = RECONNECT_MIN_MS; // 連線成功 → reset backoff
+      startHeartbeat();
+      emit("open");
+    };
     ws.onerror = (e) => { console.warn("[ws] error", e); emit("error", e); };
     ws.onclose = (e) => {
       console.log("[ws] close", e.code, e.reason);
+      stopHeartbeat();
       // reject 所有 pending
       for (const [, p] of pending) { clearTimeout(p.timer); try { p.reject(new Error("ws closed")); } catch {} }
       pending.clear();
@@ -51,7 +63,11 @@
         pending.delete(msg.req_id);
         clearTimeout(p.timer);
         if (msg.ok) p.resolve(msg.data);
-        else p.reject(new Error(msg.error || "ws error"));
+        else {
+          const err = new Error(msg.error || "ws error");
+          err.code = msg.code || null; // 暴露分類錯誤碼（KILL_SWITCH_ACTIVE 等）
+          p.reject(err);
+        }
         return;
       }
       // 2) 服務端 push (trade_update)
@@ -69,7 +85,23 @@
 
   function scheduleReconnect() {
     if (!reconnect || reconnectTimer) return;
-    reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(); }, 3000);
+    const delay = reconnectBackoff;
+    reconnectBackoff = Math.min(RECONNECT_MAX_MS, Math.floor(reconnectBackoff * 1.8));
+    reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(); }, delay);
+  }
+
+  function startHeartbeat() {
+    stopHeartbeat();
+    heartbeatTimer = setInterval(() => {
+      if (!connected()) return;
+      call("ping", null, HEARTBEAT_TIMEOUT_MS).catch(err => {
+        console.warn("[ws] heartbeat failed, closing socket:", err?.message || err);
+        try { ws && ws.close(4000, "heartbeat timeout"); } catch {}
+      });
+    }, HEARTBEAT_MS);
+  }
+  function stopHeartbeat() {
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
   }
 
   function call(cmd, params, timeoutMs) {
@@ -97,10 +129,11 @@
     status:      () => call("status"),
     login:       (user, pwd, otp) => call("login", { user, pwd, otp }),
     logout:      () => call("logout"),
-    openTrade:   (sym, qty, price, targetPct) => call("open_trade", { sym, qty, price, target_pct: targetPct }),
+    openTrade:   (sym, qty, price, targetPct, opts) => call("open_trade", Object.assign({ sym, qty, price, target_pct: targetPct }, opts || {})),
     abortTrade:  (id) => call("abort_trade", { id }),
     queryTrade:  (id) => call("query_trade", { id }),
     listTrades:  () => call("list_trades"),
+    killSwitch:  (enable) => call("kill_switch", { enable: !!enable }),
   };
   window.tradingClient = api;
 })();
