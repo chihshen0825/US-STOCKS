@@ -2880,7 +2880,13 @@ function renderQuick(card, sym, intra) {
   drawWinRate(card, intra.bars);
   bindWrMiniClicks(card, sym);
   bindWsTestButton(card, sym);
-  settleSimTradesForSymbol(sym, intra);
+  // 盤前/盤後：intra.price = meta.regularMarketPrice 會凍結在昨收，會讓 settle 拿到「昨日價」誤觸 target。
+  // 與 _tickActiveSimSymbols 一致，settle 前用 _pickFreshIntraPrice 取最新 pre/post tick 覆蓋 price。
+  const _settleFp = _pickFreshIntraPrice(intra);
+  const _settleIntra = (_settleFp && isFinite(_settleFp.price))
+    ? { ...intra, price: _settleFp.price }
+    : intra;
+  settleSimTradesForSymbol(sym, _settleIntra);
   renderExtended(card, intra);
   renderLiquidity(card, intra);
 
