@@ -2519,8 +2519,10 @@ async function fetchIntraday(symbol) {
     // 以下「今日快照」都來自 snap，讓切換時間框架不會造成跳動
     price: snap?.price ?? meta.regularMarketPrice ?? lastClose,
     prevClose: prevDaily ?? meta.regularMarketPreviousClose ?? meta.previousClose ?? meta.chartPreviousClose ?? bars[0]?.c,
-    high: snap?.high ?? meta.regularMarketDayHigh ?? (highs.length ? Math.max(...highs) : null),
-    low:  snap?.low  ?? meta.regularMarketDayLow  ?? (lows.length  ? Math.min(...lows)  : null),
+    // 「今日高 / 低」嚴格使用今日日線 bar 的 high / low；盤前 / 假日今日 bar 不存在時 → null。
+    // 不可 fallback 到 meta.regularMarketDayHigh，否則盤前會拿到「昨日」的高低，與「今日 開 --」邏輯不一致。
+    high: snap?.todayHigh ?? null,
+    low:  snap?.todayLow  ?? null,
     volume: snap?.volume ?? meta.regularMarketVolume ?? (vols.length ? vols.reduce((a, b) => a + b, 0) : null),
     avgDailyVolume: snap?.avgDaily ?? meta.averageDailyVolume3Month ?? meta.averageDailyVolume10Day ?? null,
     name: snap?.name ?? meta.shortName ?? meta.longName ?? symbol,
@@ -2529,8 +2531,8 @@ async function fetchIntraday(symbol) {
     // todayOpen 多一層 fallback 到 meta.regularMarketOpen：盤前 / 剛開盤時 daily bar 的 open
     // 可能尚未寫入，先用 meta 的即時 open 顯示，避免「開: --」。
     todayOpen: snap?.todayOpen ?? meta.regularMarketOpen ?? null,
-    todayHigh: snap?.todayHigh ?? snap?.high ?? null,
-    todayLow:  snap?.todayLow  ?? snap?.low  ?? null,
+    todayHigh: snap?.todayHigh ?? null,
+    todayLow:  snap?.todayLow  ?? null,
     prevOpen:  snap?.prevOpen  ?? null,
     prevHigh:  snap?.prevHigh  ?? null,
     prevLow:   snap?.prevLow   ?? null,
