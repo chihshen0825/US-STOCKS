@@ -7494,6 +7494,7 @@ function _renderSimLog() {
     const meta = iconMap[e.action] || { ic: "·", cls: "" };
     const row = document.createElement("div");
     row.className = `sim-log-row ${meta.cls}`;
+    row.title = "點擊複製整行";
     const span = (cls, text) => {
       const s = document.createElement("span");
       s.className = cls;
@@ -7516,6 +7517,22 @@ function _renderSimLog() {
         row.appendChild(detSpan);
       }
     }
+    // v.35 點擊複製整行純文字到剪貼簿
+    row.addEventListener("click", async () => {
+      const txt = row.innerText.replace(/\s+/g, " ").trim();
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(txt);
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+          document.body.appendChild(ta); ta.select();
+          try { document.execCommand("copy"); } finally { ta.remove(); }
+        }
+        row.classList.add("copied");
+        setTimeout(() => row.classList.remove("copied"), 600);
+      } catch (err) { try { console.warn("[sim log] copy failed", err); } catch {} }
+    });
     frag.appendChild(row);
   }
   el.replaceChildren(frag);

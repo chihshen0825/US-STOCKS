@@ -1745,14 +1745,16 @@ tr.row-hot td.sym { color: #ff7043; font-weight: 700; }
   padding: 2px 0;
   border-bottom: 1px dashed #16191f;
   white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis;
+  /* v.35 不裁切：滿出部分交給 .sim-log-list 的水平滾動條；點擊複製整行 */
+  cursor: copy;
 }
 .sim-log-row:last-child { border-bottom: 0; }
 .sim-log-time { color: #6b7280; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .sim-log-ic   { flex-shrink: 0; }
 .sim-log-sym  { color: #4fc3f7; font-weight: 700; min-width: 50px; flex-shrink: 0; }
-.sim-log-reason { color: #cfd8dc; overflow: hidden; text-overflow: ellipsis; }
+.sim-log-reason { color: #cfd8dc; }
 .sim-log-det  { color: #6b7280; margin-left: 6px; }
+.sim-log-row.copied { background: rgba(255, 213, 79, 0.18); transition: background .25s ease; }
 .sim-log-row.sim-log-ok  .sim-log-reason { color: #a5d6a7; }
 .sim-log-row.sim-log-ws  .sim-log-reason { color: #ce93d8; }
 .sim-log-row.sim-log-bad .sim-log-reason { color: #ef9a9a; }
