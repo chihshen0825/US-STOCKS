@@ -2732,6 +2732,54 @@ function _detectBreakout(bars) {
   if (_cgMul > 0 && out.distToHigh20Pct != null && out.atrPct != null) {
     out.chased = out.distToHigh20Pct > out.atrPct * _cgMul;
   }
+  // ───────── v.40 反轉觸底（mean-reversion）偵測 ─────────
+  //   1) 60 棒高至低的跌幅 ≥ 2.5%
+  //   2) 最近 3 根 K 有任一根 low 觸 60 棒最低 ±0.3% 內
+  //   3) MACD-H 由 ≤0 翻正（含最近 3 根內出現過 cross-up）
+  //   三條件皆成立 → out.reversal=true，給「🪃 反轉觸底」徽章用
+  try {
+    const N60 = Math.min(60, bars.length);
+    const window60 = bars.slice(-N60);
+    const highs60 = window60.map(b => b.h ?? b.c).filter(v => v != null);
+    const lows60  = window60.map(b => b.l ?? b.c).filter(v => v != null);
+    const max60 = highs60.length ? Math.max(...highs60) : null;
+    const min60 = lows60.length  ? Math.min(...lows60)  : null;
+    out.drop60Pct    = (max60 != null && min60 != null && max60 > 0) ? ((max60 - min60) / max60) * 100 : null;
+    out.nearLow60Pct = (min60 != null && min60 > 0)                  ? ((close - min60) / min60) * 100 : null;
+    const last3lows = bars.slice(-3).map(b => b.l ?? b.c).filter(v => v != null);
+    out.touchedLow3 = min60 != null && last3lows.some(l => l <= min60 * 1.003);
+    // 末根下影比例：body 底部到 low 占整根範圍
+    const lh = last.h, ll = last.l, lo = last.o, lc = last.c;
+    if (lh != null && ll != null && lo != null && lc != null && lh > ll) {
+      const body = Math.min(lo, lc);
+      out.wickLowerPct = ((body - ll) / (lh - ll)) * 100;
+    } else out.wickLowerPct = null;
+    // MACD-H 最近 3 根內由 ≤0 翻正（補充 histTurnUp 只看當下這根的不足）
+    out.histTurnedUpRecent = false;
+    if (closesAll.length >= 35 && typeof calcMACD === "function") {
+      try {
+        const macd2 = calcMACD(closesAll);
+        const h2 = macd2?.hist || [];
+        if (h2.length >= 4) {
+          for (let i = Math.max(1, h2.length - 3); i < h2.length; i++) {
+            if (h2[i - 1] <= 0 && h2[i] > 0) { out.histTurnedUpRecent = true; break; }
+          }
+        }
+      } catch {}
+    }
+    // RSI(14) 由 <30 cross-up：超賣反彈確認
+    out.rsiCrossUp30 = false;
+    try {
+      const rsis = (typeof calcRSI === "function") ? calcRSI(closesAll, 14) : null;
+      if (rsis && rsis.length >= 2) {
+        const rNow = rsis[rsis.length - 1], rPrev = rsis[rsis.length - 2];
+        out.rsiCrossUp30 = (rPrev < 30 && rNow >= 30);
+      }
+    } catch {}
+    out.reversal = (out.drop60Pct != null && out.drop60Pct >= 2.5)
+                && !!out.touchedLow3
+                && (!!out.histTurnUp || !!out.histTurnedUpRecent);
+  } catch {}
   return out;
 }
 
@@ -2984,12 +3032,17 @@ function renderQuick(card, sym, intra) {
   if (brkEl) {
     let _brk = null;
     try { _brk = (typeof wlData !== "undefined" && wlData.get(sym)?.brk) || _detectBreakout(intra.bars); } catch {}
-    brkEl.classList.remove("squeeze", "chased", "retest");
-    if (_brk && (_brk.breakout || _brk.retest || _brk.squeeze || _brk.chased)) {
+    brkEl.classList.remove("squeeze", "chased", "retest", "reversal");
+    if (_brk && (_brk.breakout || _brk.retest || _brk.squeeze || _brk.chased || _brk.reversal)) {
       brkEl.hidden = false;
       let label = "", cls = "";
       if (_brk.breakout) { label = `⚡突破 vol×${_brk.volRatio.toFixed(1)}`; }
       else if (_brk.retest) { label = "↺ 回測不破"; cls = "retest"; }
+      else if (_brk.reversal) {
+        const dd = (+_brk.drop60Pct || 0).toFixed(1);
+        label = `🪃 反轉觸底 −${dd}%`;
+        cls = "reversal";
+      }
       else if (_brk.chased) { label = `⚠ 追高 ${_brk.distToHigh20Pct.toFixed(2)}%`; cls = "chased"; }
       else if (_brk.squeeze) { label = `🔒 壓縮 BBW ${(_brk.bbWidthPct ?? 0).toFixed(2)}%`; cls = "squeeze"; }
       brkEl.textContent = label;
@@ -3001,6 +3054,13 @@ function renderQuick(card, sym, intra) {
       if (_brk.distToVwapPct != null) parts.push(`距VWAP ${_brk.distToVwapPct.toFixed(2)}%`);
       parts.push(`量比 ×${_brk.volRatio.toFixed(2)}`);
       if (_brk.histTurnUp) parts.push("MACD hist 翻正");
+      else if (_brk.histTurnedUpRecent) parts.push("MACD hist 近 3 根內翻正");
+      if (_brk.reversal) {
+        if (_brk.drop60Pct != null)    parts.push(`60棒高至低 −${_brk.drop60Pct.toFixed(1)}%`);
+        if (_brk.nearLow60Pct != null) parts.push(`距 60棒低 +${_brk.nearLow60Pct.toFixed(2)}%`);
+        if (_brk.wickLowerPct != null) parts.push(`末根下影 ${_brk.wickLowerPct.toFixed(0)}%`);
+        if (_brk.rsiCrossUp30)         parts.push("RSI 由超賣 cross-up 30");
+      }
       brkEl.title = parts.join(" / ");
     } else {
       brkEl.hidden = true;
