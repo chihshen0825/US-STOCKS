@@ -2626,6 +2626,102 @@ function classifyNews(items) {
   return { pos, neg, neu };
 }
 
+// =====================================================================
+// 壓縮 / 突破偵測（squeeze → breakout）：用來抓「起漲第一根」而非 BUY (3.3) 已偏高的追價點。
+// 同時供 calcSignal 加權、runSimAutoScan 過濾、卡片 ⚡突破 badge。
+// 輸入：1m bars（含 v/h/l/c/o）。內部自行算 MACD hist（避免依賴外部 heavy）。
+// =====================================================================
+function _detectBreakout(bars) {
+  const out = {
+    bbWidthPct: null, atrPct: null, volRatio: 1,
+    distToHigh20Pct: null, distToVwapPct: null,
+    squeeze: false, breakout: false, retest: false,
+    histTurnUp: false, chased: false,
+  };
+  if (!Array.isArray(bars) || bars.length < 22) return out;
+  const last = bars[bars.length - 1];
+  const close = last?.c;
+  if (close == null) return out;
+  // ATR(14)%
+  const trs = [];
+  for (let i = bars.length - 14; i < bars.length; i++) {
+    const b = bars[i], pp = bars[i - 1];
+    if (!b || !pp) continue;
+    const bh = b.h ?? b.c, bl = b.l ?? b.c;
+    trs.push(Math.max(bh - bl, Math.abs(bh - pp.c), Math.abs(bl - pp.c)));
+  }
+  const atr = trs.length ? trs.reduce((a, b) => a + b, 0) / trs.length : 0;
+  out.atrPct = close ? (atr / close) * 100 : null;
+  // BB Width (20, 2)
+  const win20 = bars.slice(-20).map(b => b.c).filter(c => c != null);
+  if (win20.length >= 15) {
+    const mean = win20.reduce((a, b) => a + b, 0) / win20.length;
+    const variance = win20.reduce((a, b) => a + (b - mean) ** 2, 0) / win20.length;
+    const sd = Math.sqrt(variance);
+    out.bbWidthPct = mean ? ((4 * sd) / mean) * 100 : null; // upper-lower = 4σ
+  }
+  // 量比：last vs avg(prev 20)
+  const vols = bars.map(b => b.v).filter(v => v != null && v > 0);
+  if (vols.length >= 11) {
+    const lastV = vols[vols.length - 1];
+    const baseN = vols.slice(-21, -1);
+    const baseAvg = baseN.length ? baseN.reduce((a, b) => a + b, 0) / baseN.length : 0;
+    out.volRatio = baseAvg > 0 ? lastV / baseAvg : 1;
+  }
+  // 近 20 根高低 (排除當下這根)
+  const prior = bars.slice(-21, -1);
+  const max20High = Math.max(...prior.map(b => b.h ?? b.c).filter(v => v != null));
+  if (isFinite(max20High)) {
+    out.distToHigh20Pct = ((close - max20High) / close) * 100;
+  }
+  // VWAP（當段所有 bar）
+  let pv = 0, sv = 0;
+  for (const b of bars) {
+    if (b.v == null || b.v <= 0 || b.c == null) continue;
+    const tp = (b.h != null && b.l != null) ? (b.h + b.l + b.c) / 3 : b.c;
+    pv += tp * b.v; sv += b.v;
+  }
+  if (sv > 0) {
+    const vwap = pv / sv;
+    out.distToVwapPct = ((close - vwap) / close) * 100;
+  }
+  // MACD hist (12/26/9) 翻正第一根
+  const closesAll = bars.map(b => b.c).filter(c => c != null);
+  if (closesAll.length >= 35 && typeof calcMACD === "function") {
+    try {
+      const macd = calcMACD(closesAll);
+      const h = macd?.hist || [];
+      if (h.length >= 2) {
+        const hNow = h[h.length - 1], hPrev = h[h.length - 2];
+        out.histTurnUp = hPrev <= 0 && hNow > 0;
+      }
+    } catch {}
+  }
+  // 壓縮：BBW < 1.2% 或 ATR < 0.4%（兩者擇一成立即可，符合 1m 盤整特徵）
+  out.squeeze = (out.bbWidthPct != null && out.bbWidthPct < 1.2)
+             || (out.atrPct != null && out.atrPct < 0.4);
+  // 突破：close > max20High（多任意幅度）+ 量比 ≥ 1.8 + close 在 VWAP 上
+  out.breakout = (out.distToHigh20Pct != null && out.distToHigh20Pct >= 0)
+              && (out.volRatio >= 1.8)
+              && (out.distToVwapPct != null && out.distToVwapPct >= -0.05);
+  // 回測不破：過去 3-8 根曾經 close > max20High，當下 low 觸前高 ±ATR×0.3 但 close 仍高於前高
+  if (bars.length >= 30 && isFinite(max20High)) {
+    const tol = (atr || close * 0.001) * 0.3;
+    let hadBreakout = false;
+    for (let i = bars.length - 8; i < bars.length - 1; i++) {
+      const b = bars[i];
+      if (b && b.c != null && b.c > max20High) { hadBreakout = true; break; }
+    }
+    const lastLow = last.l ?? last.c;
+    out.retest = hadBreakout && Math.abs(lastLow - max20High) <= tol && close >= max20High;
+  }
+  // 追高：距前高 > ATR×0.8（已偏離壓縮區頂部太遠）
+  if (out.distToHigh20Pct != null && out.atrPct != null) {
+    out.chased = out.distToHigh20Pct > out.atrPct * 0.8;
+  }
+  return out;
+}
+
 // 為「1～5 分鐘 / 0.25–0.5%」超短線最佳化的計分系統
 //   ⓪ 流動性差 → 強制 HOLD（避免滑價吃光獲利）
 //   ⓪ ATR < 0.3% → 強制 HOLD（波動不足，目標難達成）
@@ -2807,11 +2903,31 @@ function calcSignal(intra, heavy, sym) {
     reasons.push("流動性中(×0.7)");
   }
 
+  // ⑩ 壓縮 → 突破（v.21）：抓「起漲第一根」用，跟 ⑦ 突破近 20 高互補；
+  //    這裡更強調「壓縮後爆量 + MACD hist 翻正」的 timing。
+  const brk = _detectBreakout(bars);
+  if (brk.breakout && brk.histTurnUp) {
+    score += 1.8; reasons.push(`⚡突破+MACD翻正 vol×${brk.volRatio.toFixed(1)}`);
+  } else if (brk.breakout) {
+    score += 1.2; reasons.push(`⚡突破 vol×${brk.volRatio.toFixed(1)}`);
+  } else if (brk.histTurnUp) {
+    score += 0.8; reasons.push("MACD hist 翻正");
+  }
+  if (brk.retest) { score += 1.0; reasons.push("突破回測不破"); }
+  if (brk.chased && score > 0) {
+    score -= 0.5;
+    reasons.push(`追高警示 距前高 ${brk.distToHigh20Pct.toFixed(2)}%>ATR×0.8`);
+  }
+  // 壓縮狀態下放寬 BUY 門檻：原 1.5 → 1.0；簡化做法為直接補一點分讓 _labelByScore 自然觸發
+  if (brk.squeeze && !brk.breakout && score > 0 && score < (THR.scoreBuy || 1.5)) {
+    score += 0.5; reasons.push("壓縮狀態→放寬門檻");
+  }
+
   // 閾值 ±3.5 / ±1.5（放寬：原 ±5/±3 在實盤幾乎全是 HOLD）
   let label, cls;
   ({ label, cls } = _labelByScore(score));
 
-  return { label, cls, score: +score.toFixed(1), scoreRaw: score, reasons, rsi: rsiLast, volRatio, atrPct };
+  return { label, cls, score: +score.toFixed(1), scoreRaw: score, reasons, rsi: rsiLast, volRatio, atrPct, brk };
 }
 
 const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
@@ -2845,6 +2961,35 @@ function renderQuick(card, sym, intra) {
     } else {
       sb.textContent = `建議購買價格:--`;
       sb.classList.add("dim");
+    }
+  }
+  // v.21：⚡突破 / 壓縮 / 回測 / 追高 badge
+  const brkEl = card.querySelector(".brk-badge");
+  if (brkEl) {
+    let _brk = null;
+    try { _brk = (typeof wlData !== "undefined" && wlData.get(sym)?.brk) || _detectBreakout(intra.bars); } catch {}
+    brkEl.classList.remove("squeeze", "chased", "retest");
+    if (_brk && (_brk.breakout || _brk.retest || _brk.squeeze || _brk.chased)) {
+      brkEl.hidden = false;
+      let label = "", cls = "";
+      if (_brk.breakout) { label = `⚡突破 vol×${_brk.volRatio.toFixed(1)}`; }
+      else if (_brk.retest) { label = "↺ 回測不破"; cls = "retest"; }
+      else if (_brk.chased) { label = `⚠ 追高 ${_brk.distToHigh20Pct.toFixed(2)}%`; cls = "chased"; }
+      else if (_brk.squeeze) { label = `🔒 壓縮 BBW ${(_brk.bbWidthPct ?? 0).toFixed(2)}%`; cls = "squeeze"; }
+      brkEl.textContent = label;
+      if (cls) brkEl.classList.add(cls);
+      const parts = [];
+      if (_brk.bbWidthPct != null) parts.push(`BBW ${_brk.bbWidthPct.toFixed(2)}%`);
+      if (_brk.atrPct != null) parts.push(`ATR ${_brk.atrPct.toFixed(2)}%`);
+      if (_brk.distToHigh20Pct != null) parts.push(`距20高 ${_brk.distToHigh20Pct.toFixed(2)}%`);
+      if (_brk.distToVwapPct != null) parts.push(`距VWAP ${_brk.distToVwapPct.toFixed(2)}%`);
+      parts.push(`量比 ×${_brk.volRatio.toFixed(2)}`);
+      if (_brk.histTurnUp) parts.push("MACD hist 翻正");
+      brkEl.title = parts.join(" / ");
+    } else {
+      brkEl.hidden = true;
+      brkEl.textContent = "";
+      brkEl.removeAttribute("title");
     }
   }
   card.querySelector(".range").textContent = `${fmt(intra.high,2)}/${fmt(intra.low,2)}`;
@@ -3403,6 +3548,8 @@ async function computeWatchlistRow(sym, name) {
   const _wr1mOk  = winRatePct(_d1Bars, 0.003, 10, 20) != null;
   row.wrSrc     = _wr1mOk ? "1m" : "5m";
   row.wrScope   = _wrRthOnly ? "rth" : "mixed";
+  // v.21：壓縮 / 突破 / 回測旗標（auto-buy 過濾 + 卡片 ⚡badge 用）
+  try { row.brk = _detectBreakout(d1.bars); } catch { row.brk = null; }
   // 建議進場價：最近 5 根 1m 的 VWAP / 低點參考，不高於現價，避免追高
   row.suggestPx = (() => {
     const last5 = d1.bars.slice(-5).filter(b => b && b.c != null);
@@ -6223,6 +6370,16 @@ const SIM_DEFAULT_CFG = {
   maxEntrySlipPct: 0.005,
   // 勝率計算只取 RTH bars。預設 true：避免盤前/後稀疏 bar 把 wr 算高/低。
   wrRthOnly: true,
+  // v.21 起漲點過濾：
+  //   requireBreakout: true 時 auto-buy 只接受 row.brk.breakout||retest 的候選（過濾掉盤整中已沖高的個股）
+  //   preMarketBuyMode: 'normal'|'breakoutOnly'|'disabled'
+  //     - normal: 不過濾
+  //     - breakoutOnly: 盤前/後只接受 breakout/retest（盤前流動性差、雜訊多）
+  //     - disabled: 盤前/後完全不下單
+  //   chasedGuardAtrMul: 0=關閉；>0 時若 row.brk.chased=true 且偏離 > ATR×此倍數 → 拒絕（避免追高）
+  requireBreakout: false,
+  preMarketBuyMode: 'breakoutOnly',
+  chasedGuardAtrMul: 0.8,
   // 執行模式：0 = 本地模擬（1 = WS 實交
   executionMode: 0,
   wsUrl: "ws://127.0.0.1:1088/",
@@ -6231,7 +6388,8 @@ const SIM_DEFAULT_CFG = {
   // v2 (2026-05-19): wrRthOnly→false, extendedFeePct→0
   // v3 (2026-05-19): wrRthOnly→true（配合 first-touch 勝率演算法重計，避免盤前稀疏 bar 遭志）
   // v4 (2026-05-19): maxEntrySlipPct→0.005（追價成交遠離下單時市價時取消，避免追高）
-  cfgMigV: 4,
+  // v5 (2026-05-19): 新增 requireBreakout / preMarketBuyMode='breakoutOnly' / chasedGuardAtrMul=0.8
+  cfgMigV: 5,
 };
 let simTrades = [];
 let simCfg = { ...SIM_DEFAULT_CFG };
@@ -6301,6 +6459,12 @@ function loadSimTrades() {
           // v4: 進場滑價護欄預設 0.005 (0.5%)，避免追高後進場價與 WR 基準脫鉤
           if (_curMigV < 4) {
             simCfg.maxEntrySlipPct = 0.005;
+          }
+          // v5: 起漲點過濾預設值
+          if (_curMigV < 5) {
+            simCfg.requireBreakout = false;
+            simCfg.preMarketBuyMode = 'breakoutOnly';
+            simCfg.chasedGuardAtrMul = 0.8;
           }
           simCfg.cfgMigV = _newMigV;
           // 在 loadSimTrades 完成後的 setTimeout 不來得及，下一次 saveSimCfg 會寫回。為穩鬼主動寫回。
@@ -8707,9 +8871,32 @@ async function runSimAutoScan(force) {
     if (lv === 2 && !(r.wr030 >= r.wr050d)) return false;
     if (lv === 3 && !(r.wr030 >= r.wr050 && r.wr050 >= r.wr050d)) return false;
     if ((openBySym.get(r.sym) || 0) >= perSymMax) return false;
+    // v.21：起漲點過濾
+    const brk = r.brk;
+    // a) 盤前/後模式
+    const pmMode = simCfg.preMarketBuyMode || 'normal';
+    if (pmMode !== 'normal' && typeof _usSessionOfTs === 'function') {
+      const sess = _usSessionOfTs(Date.now());
+      if (sess !== 'rth') {
+        if (pmMode === 'disabled') return false;
+        if (pmMode === 'breakoutOnly' && !(brk && (brk.breakout || brk.retest))) return false;
+      }
+    }
+    // b) 全時段都要 breakout
+    if (simCfg.requireBreakout && !(brk && (brk.breakout || brk.retest))) return false;
+    // c) 追高守門：已偏離 20 高 > ATR×N → 拒絕
+    const guard = +simCfg.chasedGuardAtrMul || 0;
+    if (guard > 0 && brk && brk.atrPct != null && brk.distToHigh20Pct != null
+        && brk.distToHigh20Pct > brk.atrPct * guard) return false;
     return true;
   });
-  candidates.sort((a, b) => (b.wr030 - a.wr030) || (b.wr050 - a.wr050));
+  // 排序：有 breakout 的優先（同 wr 條件下），其次 retest，再依 wr030 / wr050
+  candidates.sort((a, b) => {
+    const ab = (a.brk?.breakout ? 2 : 0) + (a.brk?.retest ? 1 : 0);
+    const bb = (b.brk?.breakout ? 2 : 0) + (b.brk?.retest ? 1 : 0);
+    if (bb !== ab) return bb - ab;
+    return (b.wr030 - a.wr030) || (b.wr050 - a.wr050);
+  });
 
   let placed = 0;
   for (const r of candidates) {

@@ -657,6 +657,15 @@ td.rs.flat { color: #9aa0a6; }
   border: 1px solid rgba(255,183,77,0.25);
 }
 .suggest-buy.dim { color: #9aa0a6; background: transparent; border-color: transparent; }
+.brk-badge {
+  font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+  padding: 2px 8px; border-radius: 10px; margin-left: 6px;
+  color: #ffeb3b; background: rgba(255,235,59,0.10); border: 1px solid rgba(255,235,59,0.35);
+  cursor: help;
+}
+.brk-badge.squeeze { color: #80cbc4; background: rgba(128,203,196,0.08); border-color: rgba(128,203,196,0.30); }
+.brk-badge.chased  { color: #ef9a9a; background: rgba(239,154,154,0.08); border-color: rgba(239,154,154,0.30); }
+.brk-badge.retest  { color: #b39ddb; background: rgba(179,157,219,0.08); border-color: rgba(179,157,219,0.30); }
 .up   { color: #ef5350; }
 .down { color: #26a69a; }
 .flat { color: #9aa0a6; }
