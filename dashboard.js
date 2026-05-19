@@ -80,9 +80,9 @@ const PRESETS_THR = {
 };
 // v.22 每個 preset 對應的 simCfg auto-buy 預設值（點 preset 按鈕時同步套用，保留用戶其他客製）
 const PRESETS_SIMCFG = {
-  conservative: { requireBreakout: true,  preMarketBuyMode: 'disabled',     wrMin: 0.70, wrMin050: 0.35, gradientLevel: 3 },
-  standard:     { requireBreakout: false, preMarketBuyMode: 'breakoutOnly', wrMin: 0.60, wrMin050: 0.30, gradientLevel: 3 },
-  aggressive:   { requireBreakout: false, preMarketBuyMode: 'normal',       wrMin: 0.50, wrMin050: 0.20, gradientLevel: 1 },
+  conservative: { requireBreakout: true,  preMarketBuyMode: 'disabled',     wrMin: 0.70, wrMin050: 0.35, wrMax050d: 0.10, gradientLevel: 3 },
+  standard:     { requireBreakout: false, preMarketBuyMode: 'breakoutOnly', wrMin: 0.60, wrMin050: 0.30, wrMax050d: 0.15, gradientLevel: 3 },
+  aggressive:   { requireBreakout: false, preMarketBuyMode: 'normal',       wrMin: 0.50, wrMin050: 0.20, wrMax050d: 0.25, gradientLevel: 1 },
 };
 const THR_KEY = "dash_thresholds_v1";
 const THR_PRESET_KEY = "dash_threshold_preset_v1";       // 目前選用的 preset
@@ -6321,7 +6321,7 @@ function bindThresholdPanel() {
     } else if (inp instanceof HTMLInputElement && inp.type === "range") {
       const v = parseFloat(inp.value);
       if (Number.isFinite(v)) {
-        simCfg[k] = (k === "wrMin" || k === "wrMin050") ? v / 100 : v;
+        simCfg[k] = (k === "wrMin" || k === "wrMin050" || k === "wrMax050d") ? v / 100 : v;
         const out = panel.querySelector(`[data-sim-out="${k}"]`);
         if (out) out.textContent = `${v}%`;
       }
@@ -6364,7 +6364,7 @@ function renderThresholdPanel() {
       } else if (el instanceof HTMLSelectElement) {
         if (typeof v === "string") el.value = v;
       } else if (el instanceof HTMLInputElement && el.type === "range") {
-        const pct = (k === "wrMin" || k === "wrMin050") ? Math.round((+v || 0) * 100) : +v;
+        const pct = (k === "wrMin" || k === "wrMin050" || k === "wrMax050d") ? Math.round((+v || 0) * 100) : +v;
         if (Number.isFinite(pct)) {
           el.value = String(pct);
           const out = panel.querySelector(`[data-sim-out="${k}"]`);
@@ -6419,6 +6419,7 @@ const SIM_DEFAULT_CFG = {
   windowMs: 90 * 60 * 1000, // 1 - 390 分鐘（預設 1h30m）
   wrMin: 0.60,           // wr030 勝率門檻
   wrMin050: 0.30,        // wr050 勝率門檻
+  wrMax050d: 0.15,       // wr050d 賠率「上限」：候選 wr050d > 此值 → 拒絕（保護避免買到下殺機率高的）
   perSymMax: 1,          // 1 = 單一股票不連續下單；>=2 則允許同標的多筆同時持單
   scanIntervalSec: 2,    // 1-60 自動掃描間隔秒數
   gradientLevel: 3,      // 保護等級 0=不保護 1=wr050≥wr050d 2=wr030≥wr050d 3=wr030≥wr050≥wr050d（預設最保守）
@@ -6479,7 +6480,8 @@ const SIM_DEFAULT_CFG = {
   // v3 (2026-05-19): wrRthOnly→true（配合 first-touch 勝率演算法重計，避免盤前稀疏 bar 遭志）
   // v4 (2026-05-19): maxEntrySlipPct→0.005（追價成交遠離下單時市價時取消，避免追高）
   // v5 (2026-05-19): 新增 requireBreakout / preMarketBuyMode='breakoutOnly' / chasedGuardAtrMul=0.8
-  cfgMigV: 5,
+  // v6 (2026-05-19): 新增 wrMax050d=0.15（-0.5% 賠率上限保護）
+  cfgMigV: 6,
 };
 let simTrades = [];
 let simCfg = { ...SIM_DEFAULT_CFG };
@@ -8060,6 +8062,7 @@ function bindSimControls() {
   const win  = document.getElementById("simCfgWindow");
   const wrm  = document.getElementById("simCfgWrMin");
   const wrm5 = document.getElementById("simCfgWrMin050");
+  const wm5d = document.getElementById("simCfgWrMax050d");
   const psm  = document.getElementById("simCfgPerSym");
   const ssec = document.getElementById("simCfgScanSec");
   const gl   = document.getElementById("simCfgGradLv");
@@ -8096,6 +8099,7 @@ function bindSimControls() {
   const winV  = document.getElementById("simCfgWindowVal");
   const wrmV  = document.getElementById("simCfgWrMinVal");
   const wrm5V = document.getElementById("simCfgWrMin050Val");
+  const wm5dV = document.getElementById("simCfgWrMax050dVal");
   const psmV  = document.getElementById("simCfgPerSymVal");
   const ssecV = document.getElementById("simCfgScanSecVal");
   const glV   = document.getElementById("simCfgGradLvVal");
@@ -8136,6 +8140,7 @@ function bindSimControls() {
   if (win)  win.value  = String(Math.round(simCfg.windowMs / 60000));
   if (wrm)  wrm.value  = String(Math.round(simCfg.wrMin * 100));
   if (wrm5) wrm5.value = String(Math.round(simCfg.wrMin050 * 100));
+  if (wm5d) wm5d.value = String(Math.round((+simCfg.wrMax050d || 0) * 100));
   if (psm)  psm.value  = String(simCfg.perSymMax);
   if (ssec) ssec.value = String(simCfg.scanIntervalSec);
   if (gl)   gl.value   = String(simCfg.gradientLevel);
@@ -8186,6 +8191,11 @@ if (sh)   sh.value   = String(simCfg.amountPerTradeUsd);
   wrm5?.addEventListener("input", () => {
     simCfg.wrMin050 = Math.max(0.05, Math.min(1.00, (+wrm5.value || 30) / 100));
     _renderSimCfgLabels(); saveSimCfg();
+  });
+  wm5d?.addEventListener("input", () => {
+    simCfg.wrMax050d = Math.max(0, Math.min(0.60, (+wm5d.value || 15) / 100));
+    _renderSimCfgLabels(); saveSimCfg();
+    if (simCfg.autoEnabled) runSimAutoScan();
   });
   psm?.addEventListener("input", () => {
     simCfg.perSymMax = Math.max(1, Math.min(10, +psm.value || 1));
@@ -8407,7 +8417,7 @@ if (sh)   sh.value   = String(simCfg.amountPerTradeUsd);
 
   // ===== 分組「↶ 預設」按鈕：只重設該類別的欄位 =====
   const GROUP_KEYS = {
-    entry:    ["concurrency", "targetPct", "trailingStopPct", "windowMs", "wrMin", "wrMin050", "perSymMax", "gradientLevel"],
+    entry:    ["concurrency", "targetPct", "trailingStopPct", "windowMs", "wrMin", "wrMin050", "wrMax050d", "perSymMax", "gradientLevel"],
     strategy: ["entryMode", "chaseBumpSec", "chaseBumpPct", "chaseMaxSec", "chasePanicGapPct", "chasePanicMul"],
     exit:     ["exitMode", "exitChaseBumpSec", "exitChaseBumpPct", "exitChasePanicGapPct", "exitChasePanicMul"],
     risk:     ["amountPerTradeUsd", "feeBuyUsd", "feeBuyPct", "feeSellPct", "feeSellUsd", "stopLossPct", "dailyMaxLossUsd", "minPriceUsd", "maxFeePctOfAmount", "fxUsdTwd"],
@@ -8419,6 +8429,7 @@ if (sh)   sh.value   = String(simCfg.amountPerTradeUsd);
     if (win)  win.value  = String(Math.round(simCfg.windowMs / 60000));
     if (wrm)  wrm.value  = String(Math.round(simCfg.wrMin * 100));
     if (wrm5) wrm5.value = String(Math.round(simCfg.wrMin050 * 100));
+    if (wm5d) wm5d.value = String(Math.round((+simCfg.wrMax050d || 0) * 100));
     if (psm)  psm.value  = String(simCfg.perSymMax);
     if (ssec) ssec.value = String(simCfg.scanIntervalSec);
     if (gl)   gl.value   = String(simCfg.gradientLevel);
@@ -8543,6 +8554,12 @@ if (sh)   sh.value   = String(simCfg.amountPerTradeUsd);
     if (wrm5V) {
       const p = Math.round(simCfg.wrMin050 * 100);
       wrm5V.innerHTML = num(p, tierLow(p, 60, 50)) + unit("%");
+    }
+    if (wm5dV) {
+      // -0.5% 賠率上限：0=關閉 / ≤15%=安全綠 / ≤25%=注意 / >25%=偏寬
+      const p = Math.round((+simCfg.wrMax050d || 0) * 100);
+      const cls = p === 0 ? "v-off" : (p <= 15 ? "v-ok" : (p <= 25 ? "v-warn" : "v-bad"));
+      wm5dV.innerHTML = num(p === 0 ? "關" : p, cls) + (p === 0 ? "" : unit("%"));
     }
     if (psmV) {
       const v = simCfg.perSymMax;
@@ -8951,6 +8968,8 @@ async function runSimAutoScan(force) {
     if (!r || typeof r.wr030 !== "number" || typeof r.wr050 !== "number" || typeof r.wr050d !== "number") return false;
     if (r.wr030 < simCfg.wrMin) return false;
     if (r.wr050 < simCfg.wrMin050) return false;
+    // -0.5% 賠率上限保護：wr050d 太高 → 拒絕
+    if ((+simCfg.wrMax050d || 0) > 0 && r.wr050d > simCfg.wrMax050d) return false;
     // 最小股價過濾：避免 penny stock / sub-penny tick
     if ((+simCfg.minPriceUsd || 0) > 0) {
       const px = (typeof r.price === "number" && r.price > 0) ? r.price : null;
