@@ -68,11 +68,21 @@ const DEFAULT_THR = {
   scoreStrongBuy: 3.5,     // STRONG 門檻 5→3.5，避免全表都是 HOLD
   refreshSec: 2,
   cooldownBaseSec: 15,
+  // v.22 起漲點策略門檻
+  brkVolMul: 1.8,          // 突破偵測：當下 vol / 前 20 根均量 ≥ 此值才算 breakout
+  chasedGuardMul: 0.8,     // 追高守門：close 距 20 高 > ATR×此倍數 → 視為 chased（0=關閉）
+  squeezeBbwPct: 1.2,      // 壓縮判定：BB Width 百分比 < 此值（或 ATR < 0.4%）才算 squeeze
 };
 const PRESETS_THR = {
-  conservative: { atrMin: 0.5, volBurst: 4, volExtreme: 6, scoreBuy: 2.5, scoreStrongBuy: 5,   refreshSec: 3, cooldownBaseSec: 20 },
+  conservative: { atrMin: 0.5, volBurst: 4, volExtreme: 6, scoreBuy: 2.5, scoreStrongBuy: 5,   refreshSec: 3, cooldownBaseSec: 20, brkVolMul: 2.4, chasedGuardMul: 0.5, squeezeBbwPct: 1.5 },
   standard:     { ...DEFAULT_THR },
-  aggressive:   { atrMin: 0.2, volBurst: 2, volExtreme: 4, scoreBuy: 1,   scoreStrongBuy: 2.5, refreshSec: 1, cooldownBaseSec: 10 },
+  aggressive:   { atrMin: 0.2, volBurst: 2, volExtreme: 4, scoreBuy: 1,   scoreStrongBuy: 2.5, refreshSec: 1, cooldownBaseSec: 10, brkVolMul: 1.2, chasedGuardMul: 0,   squeezeBbwPct: 2.0 },
+};
+// v.22 每個 preset 對應的 simCfg auto-buy 預設值（點 preset 按鈕時同步套用，保留用戶其他客製）
+const PRESETS_SIMCFG = {
+  conservative: { requireBreakout: true,  preMarketBuyMode: 'disabled',     wrMin: 0.70, wrMin050: 0.35, gradientLevel: 3 },
+  standard:     { requireBreakout: false, preMarketBuyMode: 'breakoutOnly', wrMin: 0.60, wrMin050: 0.30, gradientLevel: 3 },
+  aggressive:   { requireBreakout: false, preMarketBuyMode: 'normal',       wrMin: 0.50, wrMin050: 0.20, gradientLevel: 1 },
 };
 const THR_KEY = "dash_thresholds_v1";
 const THR_PRESET_KEY = "dash_threshold_preset_v1";       // 目前選用的 preset
@@ -2697,12 +2707,14 @@ function _detectBreakout(bars) {
       }
     } catch {}
   }
-  // 壓縮：BBW < 1.2% 或 ATR < 0.4%（兩者擇一成立即可，符合 1m 盤整特徵）
-  out.squeeze = (out.bbWidthPct != null && out.bbWidthPct < 1.2)
+  // 壓縮：BBW < THR.squeezeBbwPct (預設 1.2%) 或 ATR < 0.4%（兩者擇一成立即可）
+  const _squeezeBbw = (typeof THR !== "undefined" && +THR.squeezeBbwPct) || 1.2;
+  out.squeeze = (out.bbWidthPct != null && out.bbWidthPct < _squeezeBbw)
              || (out.atrPct != null && out.atrPct < 0.4);
-  // 突破：close > max20High（多任意幅度）+ 量比 ≥ 1.8 + close 在 VWAP 上
+  // 突破：close > max20High（任意幅度）+ 量比 ≥ THR.brkVolMul (預設 1.8) + close 在 VWAP 上
+  const _brkVol = (typeof THR !== "undefined" && +THR.brkVolMul) || 1.8;
   out.breakout = (out.distToHigh20Pct != null && out.distToHigh20Pct >= 0)
-              && (out.volRatio >= 1.8)
+              && (out.volRatio >= _brkVol)
               && (out.distToVwapPct != null && out.distToVwapPct >= -0.05);
   // 回測不破：過去 3-8 根曾經 close > max20High，當下 low 觸前高 ±ATR×0.3 但 close 仍高於前高
   if (bars.length >= 30 && isFinite(max20High)) {
@@ -2715,9 +2727,10 @@ function _detectBreakout(bars) {
     const lastLow = last.l ?? last.c;
     out.retest = hadBreakout && Math.abs(lastLow - max20High) <= tol && close >= max20High;
   }
-  // 追高：距前高 > ATR×0.8（已偏離壓縮區頂部太遠）
-  if (out.distToHigh20Pct != null && out.atrPct != null) {
-    out.chased = out.distToHigh20Pct > out.atrPct * 0.8;
+  // 追高：距前高 > ATR × THR.chasedGuardMul（預設 0.8；0=關閉，永遠 false）
+  const _cgMul = (typeof THR !== "undefined" && +THR.chasedGuardMul) || 0;
+  if (_cgMul > 0 && out.distToHigh20Pct != null && out.atrPct != null) {
+    out.chased = out.distToHigh20Pct > out.atrPct * _cgMul;
   }
   return out;
 }
@@ -2753,6 +2766,7 @@ function calcSignal(intra, heavy, sym) {
   }
 
   // ⓪-B ATR 可行性閘門：1m ATR(14) < 0.3% → 0.25–0.5% 目標難達成
+  //     例外（v.22）：若同時偵測到 breakout → 視為剛從壓縮區突破，放行（波動即將擴張）
   let atrPct = null;
   if (bars.length >= 15) {
     const trs = [];
@@ -2767,7 +2781,9 @@ function calcSignal(intra, heavy, sym) {
       atrPct = price ? (atr / price) * 100 : null;
     }
   }
-  if (atrPct != null && atrPct < THR.atrMin) {
+  // 預先偵測 breakout，供 ATR gate bypass 用
+  const brk = _detectBreakout(bars);
+  if (atrPct != null && atrPct < THR.atrMin && !brk.breakout) {
     return { label: "HOLD", cls: "signal-hold", score: 0,
       reasons: [`波動不足 ATR ${atrPct.toFixed(2)}%(HOLD)`],
       rsi: null, volRatio: 1 };
@@ -2905,7 +2921,7 @@ function calcSignal(intra, heavy, sym) {
 
   // ⑩ 壓縮 → 突破（v.21）：抓「起漲第一根」用，跟 ⑦ 突破近 20 高互補；
   //    這裡更強調「壓縮後爆量 + MACD hist 翻正」的 timing。
-  const brk = _detectBreakout(bars);
+  //    （brk 已於 ATR gate 前預先偵測，直接重用。）
   if (brk.breakout && brk.histTurnUp) {
     score += 1.8; reasons.push(`⚡突破+MACD翻正 vol×${brk.volRatio.toFixed(1)}`);
   } else if (brk.breakout) {
@@ -6240,6 +6256,15 @@ function bindThresholdPanel() {
       CURRENT_PRESET = preset;
       Object.assign(THR, DEFAULT_THR, PRESET_OVERRIDES[preset]);
       saveThresholds();
+      // v.22：同步 auto-buy 相關 simCfg（require/preMarket/wrMin/gradient）→ 與 preset 風格一致
+      try {
+        const simDefs = PRESETS_SIMCFG[preset];
+        if (simDefs && typeof simCfg !== "undefined") {
+          Object.assign(simCfg, simDefs);
+          if (typeof saveSimCfg === "function") saveSimCfg();
+          if (typeof _renderSimRule === "function") _renderSimRule();
+        }
+      } catch {}
       renderThresholdPanel();
       applyThresholdsRuntime();
     }
@@ -6268,6 +6293,36 @@ function bindThresholdPanel() {
       applyThresholdsRuntime();
     }
   });
+  // v.22 起漲點策略子區塊：sim cfg 控制項（requireBreakout / preMarketBuyMode / wrMin）
+  panel.addEventListener("change", (e) => {
+    const inp = e.target;
+    if (!(inp instanceof HTMLElement) || !inp.dataset.sim) return;
+    const k = inp.dataset.sim;
+    if (typeof simCfg === "undefined") return;
+    if (inp instanceof HTMLInputElement && inp.type === "checkbox") {
+      simCfg[k] = inp.checked;
+    } else if (inp instanceof HTMLSelectElement) {
+      simCfg[k] = inp.value;
+    } else if (inp instanceof HTMLInputElement && inp.type === "range") {
+      const v = parseFloat(inp.value);
+      if (Number.isFinite(v)) {
+        simCfg[k] = (k === "wrMin" || k === "wrMin050") ? v / 100 : v;
+        const out = panel.querySelector(`[data-sim-out="${k}"]`);
+        if (out) out.textContent = `${v}%`;
+      }
+    }
+    try { if (typeof saveSimCfg === "function") saveSimCfg(); } catch {}
+    try { if (typeof _renderSimRule === "function") _renderSimRule(); } catch {}
+  });
+  panel.addEventListener("input", (e) => {
+    const inp = e.target;
+    if (!(inp instanceof HTMLInputElement) || !inp.dataset.sim || inp.type !== "range") return;
+    const v = parseFloat(inp.value);
+    if (Number.isFinite(v)) {
+      const out = panel.querySelector(`[data-sim-out="${inp.dataset.sim}"]`);
+      if (out) out.textContent = `${v}%`;
+    }
+  });
 }
 function renderThresholdPanel() {
   const panel = document.getElementById("thresholdPanel");
@@ -6283,6 +6338,26 @@ function renderThresholdPanel() {
     const out = panel.querySelector(`[data-thr-out="${inp.dataset.thr}"]`);
     if (out) out.textContent = String(THR[inp.dataset.thr]);
   });
+  // v.22 起漲點策略 sim cfg 控制項回填
+  if (typeof simCfg !== "undefined") {
+    panel.querySelectorAll("[data-sim]").forEach((el) => {
+      const k = el.dataset.sim;
+      if (k == null) return;
+      const v = simCfg[k];
+      if (el instanceof HTMLInputElement && el.type === "checkbox") {
+        el.checked = !!v;
+      } else if (el instanceof HTMLSelectElement) {
+        if (typeof v === "string") el.value = v;
+      } else if (el instanceof HTMLInputElement && el.type === "range") {
+        const pct = (k === "wrMin" || k === "wrMin050") ? Math.round((+v || 0) * 100) : +v;
+        if (Number.isFinite(pct)) {
+          el.value = String(pct);
+          const out = panel.querySelector(`[data-sim-out="${k}"]`);
+          if (out) out.textContent = `${pct}%`;
+        }
+      }
+    });
+  }
   const cur = panel.querySelector("[data-preset-current]");
   if (cur) cur.textContent = currentPreset === "conservative" ? "保守"
                             : currentPreset === "aggressive" ? "激進" : "標準";
@@ -8884,8 +8959,8 @@ async function runSimAutoScan(force) {
     }
     // b) 全時段都要 breakout
     if (simCfg.requireBreakout && !(brk && (brk.breakout || brk.retest))) return false;
-    // c) 追高守門：已偏離 20 高 > ATR×N → 拒絕
-    const guard = +simCfg.chasedGuardAtrMul || 0;
+    // c) 追高守門：已偏離 20 高 > ATR×N → 拒絕（優先讀 THR.chasedGuardMul，否則退回 simCfg）
+    const guard = (typeof THR !== "undefined" && +THR.chasedGuardMul) || +simCfg.chasedGuardAtrMul || 0;
     if (guard > 0 && brk && brk.atrPct != null && brk.distToHigh20Pct != null
         && brk.distToHigh20Pct > brk.atrPct * guard) return false;
     return true;

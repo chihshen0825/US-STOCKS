@@ -155,6 +155,37 @@
         <input type="range" data-thr="cooldownBaseSec" min="5" max="120" step="5">
         <output data-thr-out="cooldownBaseSec"></output>
       </label>
+      <label class="threshold-row"><span title="突破量比門檻：壓縮 → 突破偵測器要求「當下 vol / 前 20 根均量 ≥ 此值」才認列 breakout。&#10;&#10;影響：&#10;• 影響 calcSignal 第⑩段 ⚡突破 加分（+1.2~+1.8 分）&#10;• 影響卡片 ⚡突破 badge 是否亮起&#10;• 影響 auto-buy 候選排序（breakout 優先）&#10;&#10;範例：&#10;• 1.2（激進）→ 量比 1.2 倍就視為突破，雜訊多&#10;• 1.8（標準）→ 平衡&#10;• 2.4（保守）→ 必須真爆量才算&#10;&#10;建議：對齊量爆門檻 ×0.6 左右">突破量比 ≥ <i class="thr-info">ⓘ</i></span>
+        <input type="range" data-thr="brkVolMul" min="1" max="5" step="0.1">
+        <output data-thr-out="brkVolMul"></output>
+      </label>
+      <label class="threshold-row"><span title="追高守門 ATR 倍數：當 close 距 20 根高 > ATR × 此倍數 → 視為「已追高」。&#10;&#10;影響：&#10;• calcSignal 對 chased 個股 -0.5 分（追高警示 reason）&#10;• auto-buy 拒絕此檔候選（避免進場價遠離壓縮區頂部）&#10;• 卡片顯示「⚠ 追高 X%」badge&#10;&#10;範例：&#10;• 0（關閉）→ 完全不過濾，激進&#10;• 0.5（保守）→ 略偏離前高即拒絕&#10;• 0.8（標準）→ 平衡&#10;• 2.0（寬鬆）→ 幾乎不擋&#10;&#10;0 為關閉">追高守門 ATR× <i class="thr-info">ⓘ</i></span>
+        <input type="range" data-thr="chasedGuardMul" min="0" max="2" step="0.1">
+        <output data-thr-out="chasedGuardMul"></output>
+      </label>
+      <label class="threshold-row"><span title="壓縮 BBW 門檻 (%)：Bollinger Band Width 百分比 < 此值（或 ATR < 0.4%）即視為「壓縮狀態」。&#10;&#10;影響：&#10;• 壓縮狀態下 score &lt; BUY 門檻時自動 +0.5 分（更敏感）&#10;• 卡片顯示 🔒 壓縮 BBW X% badge&#10;• 為下一根突破做準備&#10;&#10;範例：&#10;• 0.8（嚴格）→ 只認最緊的盤整&#10;• 1.2（標準）→ 平衡&#10;• 2.0（寬鬆）→ 大部分時段都算壓縮，加分變雜訊&#10;&#10;建議：保持 1.0~1.5">壓縮 BBW (%) <i class="thr-info">ⓘ</i></span>
+        <input type="range" data-thr="squeezeBbwPct" min="0.3" max="3" step="0.1">
+        <output data-thr-out="squeezeBbwPct"></output>
+      </label>
+    </div>
+    <div class="threshold-sub" data-sec="autobuy">
+      <div class="threshold-sub-title">🚀 起漲點策略（auto-buy 過濾，preset 切換時會自動套用建議值）</div>
+      <div class="threshold-grid">
+        <label class="threshold-row"><span title="只買突破：開啟後 auto-buy 只接受 row.brk.breakout 或 retest 的候選，過濾掉純高勝率但已沖高的股。&#10;&#10;預設：保守=開、標準=關、激進=關">只買突破/回測</span>
+          <input type="checkbox" data-sim="requireBreakout">
+        </label>
+        <label class="threshold-row"><span title="盤前/盤後買進模式：&#10;• normal: 不過濾（盤前流動性差仍下單）&#10;• breakoutOnly: 盤前/後只買突破/回測（推薦）&#10;• disabled: 盤前/後完全不下單（最保守）">盤前/後模式</span>
+          <select data-sim="preMarketBuyMode">
+            <option value="normal">normal（不過濾）</option>
+            <option value="breakoutOnly">breakoutOnly（只買突破）</option>
+            <option value="disabled">disabled（盤前後不買）</option>
+          </select>
+        </label>
+        <label class="threshold-row"><span title="auto-buy 漲 0.3% 勝率門檻 (%)：候選必須 wr030 ≥ 此值才會被下單。&#10;&#10;預設：保守 70%、標準 60%、激進 50%">wrMin 0.3% (%)</span>
+          <input type="range" data-sim="wrMin" min="30" max="95" step="1">
+          <output data-sim-out="wrMin"></output>
+        </label>
+      </div>
     </div>
     <div class="settings-actions">
       <button data-act="reset-current" class="ghost" title="還原目前選取的 preset到原廠官方值">回預設</button>
