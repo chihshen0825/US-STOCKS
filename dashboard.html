@@ -379,7 +379,8 @@
             <input type="range" id="simCfgWindow" min="1" max="390" step="1" value="90">
             <b id="simCfgWindowVal" class="sim-ctrl-val">1h30m</b>
           </label>
-          <div class="sim-ctrl-pair sim-ctrl-pair-tier-med">
+          <!-- 📊 機率過濾類：四個設定同組（皆為高重要性 tier-high） -->
+          <div class="sim-ctrl-pair sim-ctrl-pair-tier-high">
             <label class="sim-ctrl" title="進場前提：近期『漲 0.3% 的勝率』必須 ≥ 此 %。值越高越保守。">
               <span class="sim-ctrl-label">漲 0.3% 門檻</span>
               <input type="range" id="simCfgWrMin" min="5" max="100" step="1" value="60">
@@ -391,20 +392,22 @@
               <b id="simCfgWrMin050Val" class="sim-ctrl-val">30%</b>
             </label>
           </div>
-          <label class="sim-ctrl sim-ctrl-tier-high" title="保護等級（避免買到下跌機率高於上漲機率的個股）：
+          <div class="sim-ctrl-pair sim-ctrl-pair-tier-high">
+            <label class="sim-ctrl" title="保護等級（避免買到下跌機率高於上漲機率的個股）：
 0 = 不保護（最積極）
 1 = 漲 0.5% 機率 ≥ 跌 0.5% 機率
 2 = 漲 0.3% 機率 ≥ 跌 0.5% 機率
 3 = 漲 0.3% ≥ 漲 0.5% ≥ 跌 0.5%（最保守，預設）">
-            <span class="sim-ctrl-label">保護等級</span>
-            <input type="range" id="simCfgGradLv" min="0" max="3" step="1" value="3">
-            <b id="simCfgGradLvVal" class="sim-ctrl-val">3 保守</b>
-          </label>
-          <label class="sim-ctrl sim-ctrl-tier-high" title="-0.5% 賠率上限 (%)：候選股票的 wr050d（未來 10 分鐘內先觸 -0.5% 的歷史機率）必須 ≤ 此值才允許下單。值越低越保守。&#10;&#10;預設：保守 10%、標準 15%、激進 25%。設 0 = 不過濾。">
-            <span class="sim-ctrl-label">-0.5% 賠率上限</span>
-            <input type="range" id="simCfgWrMax050d" min="0" max="60" step="1" value="15">
-            <b id="simCfgWrMax050dVal" class="sim-ctrl-val">15%</b>
-          </label>
+              <span class="sim-ctrl-label">保護等級</span>
+              <input type="range" id="simCfgGradLv" min="0" max="3" step="1" value="3">
+              <b id="simCfgGradLvVal" class="sim-ctrl-val">3 保守</b>
+            </label>
+            <label class="sim-ctrl" title="-0.5% 賠率上限 (%)：候選股票的 wr050d（未來 10 分鐘內先觸 -0.5% 的歷史機率）必須 ≤ 此值才允許下單。值越低越保守。&#10;&#10;預設：保守 10%、標準 15%、激進 25%。設 0 = 不過濾。">
+              <span class="sim-ctrl-label">-0.5% 賠率上限</span>
+              <input type="range" id="simCfgWrMax050d" min="0" max="60" step="1" value="15">
+              <b id="simCfgWrMax050dVal" class="sim-ctrl-val">15%</b>
+            </label>
+          </div>
         </div>
       </div>
 
