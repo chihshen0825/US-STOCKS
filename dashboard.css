@@ -2517,6 +2517,14 @@ tr.row-hot td.sym { color: #ff7043; font-weight: 700; }
 #simAutoBtn { font-weight: 700; white-space: nowrap; }
 #simAutoBtn.danger { background: #ef5350; color: #fff; border-color: #ef5350; }
 #simCfgResetBtn, #simScanNowBtn { white-space: nowrap; }
+/* v.49 自動買入範圍下拉 */
+.sim-auto-scope {
+  font-size: 12px; color: #d0d4d9;
+  background: #0e1116; border: 1px solid #2a2d34; border-radius: 8px;
+  padding: 4px 8px; max-width: 220px; cursor: pointer;
+}
+.sim-auto-scope:hover { border-color: #3a3f47; }
+.sim-auto-scope:focus { outline: none; border-color: #ffd54f; }
 .sim-toggle {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 5px 10px;

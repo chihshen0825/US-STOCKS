@@ -4447,6 +4447,8 @@ function renderWatchlist() {
   }
   const _rest = rows.filter(r => !_pinSet.has(r.sym));
   const _finalRows = _pinned.concat(_rest);
+  // v.49 曝露「自選區」（= 不含釘選、已排序的備選清單顯示順序）供自動買入範圍使用
+  _wlDisplayUnpinnedRows = _rest;
   tbody.innerHTML = "";
   for (const r of _finalRows) {
     const _isPinned = _pinSet.has(r.sym);
@@ -6696,6 +6698,8 @@ const SIM_DEFAULT_CFG = {
   // v11 (2026-05-19): 新預設組（依用戶實戰調整）—— targetPct 0.006→0.004、wrMin050 0.30→0.60、gradientLevel 3→1；standard preset 同步：wrMin050 0.35→0.60、wrMax050d 0.10→0.15、gradientLevel 3→1
   // v12 (2026-05-20): 追價可達性收緊 —— chaseBumpPct 0.01→0.05（步幅 ×5 追得上飆股）、chasePanicGapPct 0.5→0.3（狂飆加速更早觸發）、maxBumpCount 5→8、新增 unfilledCooldownSec=120（同 sym unfilled 後冷卻避免燒追價）
   cfgMigV: 12,
+  // v.49 自動買入掃描範圍：all / grid1 / grid12 / grid123 / wl123 / gridWl16 / pinned / pinned_wl1 / pinned_wl12 / pinned_wl123
+  autoScopeMode: "all",
 };
 let simTrades = [];
 let simCfg = { ...SIM_DEFAULT_CFG };
@@ -6704,6 +6708,41 @@ let _simAutoStopTimer = null;  // 測試時長到期前 1 秒自動關閉 auto
 let _simAutoStopAt = 0;        // 預定停止時間 (ms epoch)
 let _simAutoCountdownTimer = null;  // 按鈕倒數 1s tick
 let _simLastScan = null;  // { time, wlSize, candidates, placed, reason }
+// v.49 自選區（不含釘選、已排序的備選清單顯示順序）快照 ——由 renderWatchlist 更新
+let _wlDisplayUnpinnedRows = [];
+
+// v.49 自動買入範圍解析：回傳該範圍的 sym 陣列（保留順序、去重）；回 null = 不限制（使用 wlData 全部）
+function _autoScopeSyms(mode) {
+  const grid = Array.isArray(symbols) ? symbols : [];
+  const wl = (_wlDisplayUnpinnedRows || []).map(r => r && r.sym).filter(Boolean);
+  const pin = Array.isArray(wlPinned) ? [...wlPinned] : [];
+  const take = (arr, n) => arr.slice(0, n);
+  const merge = (...lists) => {
+    const out = []; const seen = new Set();
+    for (const ls of lists) for (const s of ls) if (s && !seen.has(s)) { seen.add(s); out.push(s); }
+    return out;
+  };
+  switch (mode) {
+    case "grid1":        return take(grid, 1);
+    case "grid12":       return take(grid, 2);
+    case "grid123":      return take(grid, 3);
+    case "wl123":        return take(wl, 3);
+    case "gridWl16":     return take(merge(grid, wl), 6);
+    case "pinned":       return [...pin];
+    case "pinned_wl1":   return merge(pin, take(wl, 1));
+    case "pinned_wl12":  return merge(pin, take(wl, 2));
+    case "pinned_wl123": return merge(pin, take(wl, 3));
+    case "all":
+    default:             return null;
+  }
+}
+function _autoScopeLabel(mode) {
+  return ({
+    all: "全備選", grid1: "工作區 1", grid12: "工作區 1-2", grid123: "工作區 1-3",
+    wl123: "自選區 1-3", gridWl16: "工+自 1-6", pinned: "釘選",
+    pinned_wl1: "釘選+自選 1", pinned_wl12: "釘選+自選 1-2", pinned_wl123: "釘選+自選 1-3",
+  })[mode || "all"] || "全備選";
+}
 
 function _fmtHMS(ms) {
   if (!isFinite(ms) || ms <= 0) return "00:00:00";
@@ -8800,6 +8839,17 @@ if (sh)   sh.value   = String(simCfg.amountPerTradeUsd);
     else { _stopSimAutoTimer(); }
   });
 
+  // v.49 自動買入掃描範圍下拉
+  const scopeSel = document.getElementById("simAutoScopeSel");
+  if (scopeSel) {
+    scopeSel.value = simCfg.autoScopeMode || "all";
+    scopeSel.addEventListener("change", () => {
+      simCfg.autoScopeMode = scopeSel.value || "all";
+      saveSimCfg();
+      if (simCfg.autoEnabled) runSimAutoScan();
+    });
+  }
+
   document.getElementById("simScanNowBtn")?.addEventListener("click", () => { runSimAutoScan(true); });
 
   // 匯率手動重查按鈕
@@ -9404,6 +9454,10 @@ async function runSimAutoScan(force) {
     _renderSimAutoStatusLive(); return;
   }
 
+  // v.49 依「自動買入範圍」預篩選備選清單子集；null 代表不限制
+  const _scopeMode = simCfg.autoScopeMode || "all";
+  const _scopeSyms = _autoScopeSyms(_scopeMode);
+
   // 計入「同時持單」的狀態：
   //   pending  = 已送出尚未成交（限價單等待中、追價中）
   //   open     = 已成交持有中
@@ -9426,7 +9480,20 @@ async function runSimAutoScan(force) {
   }
   const perSymMax = Math.max(1, simCfg.perSymMax | 0);
 
-  const rows = [...wlData.values()];
+  // v.49 依 scope 選出 rows：all → 全 wlData；其餘 → 取 wlData 內对應該範圍 sym 的 row
+  let rows;
+  if (!_scopeSyms) {
+    rows = [...wlData.values()];
+  } else {
+    rows = _scopeSyms.map(s => wlData.get(s)).filter(Boolean);
+    if (rows.length === 0) {
+      _simLastScan = {
+        time: Date.now(), wlSize: 0, candidates: 0, placed: 0,
+        reason: `Scope=${_autoScopeLabel(_scopeMode)}：範圍內 0 檔可用（請確認工作區/釘選/自選區是否為空且備選清單已載入）`,
+      };
+      _renderSimAutoStatusLive(); return;
+    }
+  }
   // v.26 診斷模式：將 filter 拆成「逐項評估，回傳第一個拒絕原因」→ 可彙總顯示為什麼 0 候選
   const _reject = (r) => {
     if (!r || typeof r.wr030 !== "number" || typeof r.wr050 !== "number" || typeof r.wr050d !== "number") return "❌ 缺資料 (wr030/050/050d)";

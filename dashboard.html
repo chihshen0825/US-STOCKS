@@ -325,6 +325,18 @@
             <button type="button" id="simFxRefreshBtn" class="sim-fx-refresh" title="重新查詢線上匯率">🔄</button>
           </span>
           <span class="sim-auto-status" id="simAutoStatus"><span class="sim-auto-dot"></span>自動：關閉</span>
+          <select id="simAutoScopeSel" class="sim-auto-scope" title="自動買入掃描範圍。取重複、保留順序；列表內無資料的代碼會被跳過。">
+            <option value="all">全備選股（自動選）</option>
+            <option value="grid1">僅工作區第 1 檔</option>
+            <option value="grid12">僅工作區第 1-2 檔</option>
+            <option value="grid123">僅工作區第 1-3 檔</option>
+            <option value="wl123">僅自選區第 1-3 檔</option>
+            <option value="gridWl16">工作區 + 自選區 共 1-6 檔</option>
+            <option value="pinned">釘選的股票</option>
+            <option value="pinned_wl1">釘選 + 自選區第 1 檔</option>
+            <option value="pinned_wl12">釘選 + 自選區第 1-2 檔</option>
+            <option value="pinned_wl123">釘選 + 自選區第 1-3 檔</option>
+          </select>
           <button type="button" id="simAutoBtn" class="primary">▶ 啟用自動買入</button>
         </div>
       </div>
