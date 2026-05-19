@@ -6290,9 +6290,24 @@ function bindThresholdPanel() {
         PRESET_OVERRIDES[p] = { ...PRESETS_THR[p] };
         Object.assign(THR, DEFAULT_THR, PRESETS_THR[p]);
         saveThresholds();
-        renderThresholdPanel();
-        applyThresholdsRuntime();
       }
+      // v.27 同時把面板上所有 [data-sim] 對應的 simCfg key 還原成預設
+      //   優先 preset 值（PRESETS_SIMCFG[p]），其次 SIM_DEFAULT_CFG。
+      try {
+        if (typeof simCfg !== "undefined") {
+          const presetSim = (typeof PRESETS_SIMCFG !== "undefined" && PRESETS_SIMCFG[p]) || {};
+          panel.querySelectorAll("[data-sim]").forEach((el) => {
+            const k = el.dataset.sim;
+            if (!k) return;
+            if (k in presetSim) simCfg[k] = presetSim[k];
+            else if (k in SIM_DEFAULT_CFG) simCfg[k] = SIM_DEFAULT_CFG[k];
+          });
+          if (typeof saveSimCfg === "function") saveSimCfg();
+          if (typeof _renderSimRule === "function") _renderSimRule();
+        }
+      } catch {}
+      renderThresholdPanel();
+      applyThresholdsRuntime();
     }
   });
   panel.addEventListener("input", (e) => {
