@@ -9177,38 +9177,91 @@ async function runSimAutoScan(force) {
     // v.33 找「最接近通過」的標的：列出全部不符項與如何調設定可以買到
     let bestRejectInfo = null;
     try {
+      // 把每個設定 key 翻成「在哪個面板、什麼名字、怎麼調」的人話
+      // P1 = 主面板齒輪 → ⚙ 訊號門檻 → 🚀 起漲點策略
+      // P2 = 試單面板 → 🎯 進場篩選
+      // P3 = 試單面板 → 🛡 風控
+      const P1 = "設定齒輪 → ⚙ 訊號門檻 → 🚀 起漲點策略";
+      const P2 = "試單面板 → 🎯 進場篩選";
+      const P3 = "試單面板 → 🛡 風控";
+      const _whereHint = (key, curStr, targetStr) => {
+        const map = {
+          wrMin:             { panel: P1, ctrl: "「wrMin 0.3% (%)」滑桿", verb: "拉低到" },
+          wrMin050:          { panel: P2, ctrl: "「漲 0.5% 門檻」滑桿",   verb: "拉低到" },
+          wrMax050d:         { panel: P2, ctrl: "「-0.5% 賠率上限」滑桿", verb: "拉高到" },
+          minPriceUsd:       { panel: P3, ctrl: "「最小股價」滑桿",       verb: "拉低到" },
+          gradientLevel:     { panel: P2, ctrl: "「保護等級」滑桿",       verb: "拉低到" },
+          perSymMax:         { panel: P2, ctrl: "「同股最大持單」(若無 UI 則需手動調 storage)", verb: "升到" },
+          requireHistTurnUp: { panel: P1, ctrl: "「MACD-H 必翻紅」勾選",   verb: "取消勾選" },
+          minVolBurstAuto:   { panel: P1, ctrl: "「量比下限 (×N)」滑桿",  verb: "拉低到" },
+          rsiMaxAuto:        { panel: P1, ctrl: "「RSI 上限」滑桿",        verb: "拉高到" },
+          preMarketBuyMode:  { panel: P1, ctrl: "「盤前/後模式」下拉",     verb: "改成" },
+          requireBreakout:   { panel: P1, ctrl: "「只買突破/回測」勾選",   verb: "取消勾選" },
+          chasedGuardAtrMul: { panel: P1, ctrl: "「追高守門 ATR×」滑桿",  verb: "拉高到（或設 0 關閉）" },
+        };
+        const m = map[key];
+        if (!m) return "";
+        if (key === "requireHistTurnUp" || key === "requireBreakout") {
+          return `→ 到「${m.panel}」找到 ${m.ctrl}，${m.verb}（目前是勾選）`;
+        }
+        return `→ 到「${m.panel}」找到 ${m.ctrl}，目前 ${curStr}，${m.verb} ${targetStr}`;
+      };
+
       const _rejectAll = (r) => {
         const fails = [];
         if (!r || typeof r.wr030 !== "number" || typeof r.wr050 !== "number" || typeof r.wr050d !== "number") return null;
-        if (r.staleSuspect) fails.push("stale quote 嫌疑（等下次報價刷新）");
-        if (r.wr030 < simCfg.wrMin) fails.push(`wr030 ${(r.wr030*100|0)}% < ${(simCfg.wrMin*100|0)}% → wrMin 降到 ${(Math.floor(r.wr030*100)/100).toFixed(2)}`);
-        if (r.wr050 < simCfg.wrMin050) fails.push(`wr050 ${(r.wr050*100|0)}% < ${(simCfg.wrMin050*100|0)}% → wrMin050 降到 ${(Math.floor(r.wr050*100)/100).toFixed(2)}`);
-        if ((+simCfg.wrMax050d || 0) > 0 && r.wr050d > simCfg.wrMax050d) fails.push(`wr050d ${(r.wr050d*100|0)}% > ${(simCfg.wrMax050d*100|0)}% → wrMax050d 升到 ${(Math.ceil(r.wr050d*100)/100).toFixed(2)}`);
+        if (r.staleSuspect) fails.push("【stale quote 嫌疑】最新報價疑似凍結，無動作可做 → 等下次掃描刷新報價");
+        if (r.wr030 < simCfg.wrMin) {
+          const tgt = (Math.floor(r.wr030 * 100));
+          fails.push(`【wr030 不足】此檔 ${(r.wr030*100|0)}%，門檻 ${(simCfg.wrMin*100|0)}% ${_whereHint("wrMin", `${(simCfg.wrMin*100|0)}%`, `${tgt}%`)}`);
+        }
+        if (r.wr050 < simCfg.wrMin050) {
+          const tgt = (Math.floor(r.wr050 * 100));
+          fails.push(`【wr050 不足】此檔 ${(r.wr050*100|0)}%，門檻 ${(simCfg.wrMin050*100|0)}% ${_whereHint("wrMin050", `${(simCfg.wrMin050*100|0)}%`, `${tgt}%`)}`);
+        }
+        if ((+simCfg.wrMax050d || 0) > 0 && r.wr050d > simCfg.wrMax050d) {
+          const tgt = (Math.ceil(r.wr050d * 100));
+          fails.push(`【wr050d 過高】此檔 ${(r.wr050d*100|0)}%，上限 ${(simCfg.wrMax050d*100|0)}% ${_whereHint("wrMax050d", `${(simCfg.wrMax050d*100|0)}%`, `${tgt}%`)}`);
+        }
         if ((+simCfg.minPriceUsd || 0) > 0) {
           const px = (typeof r.price === "number" && r.price > 0) ? r.price : null;
-          if (px !== null && px < simCfg.minPriceUsd) fails.push(`股價 $${px.toFixed(2)} < $${simCfg.minPriceUsd} → minPriceUsd 降到 ${Math.max(0, Math.floor(px))}`);
+          if (px !== null && px < simCfg.minPriceUsd) {
+            const tgt = Math.max(0, Math.floor(px));
+            fails.push(`【股價過低】此檔 $${px.toFixed(2)}，門檻 $${simCfg.minPriceUsd} ${_whereHint("minPriceUsd", `$${simCfg.minPriceUsd}`, `$${tgt}`)}`);
+          }
         }
         const lv = Math.max(0, Math.min(3, simCfg.gradientLevel | 0));
-        if (lv === 1 && !(r.wr050 >= r.wr050d)) fails.push("保護L1 wr050<wr050d → gradientLevel 改 0");
-        if (lv === 2 && !(r.wr030 >= r.wr050d)) fails.push("保護L2 wr030<wr050d → gradientLevel 改 1 或 0");
-        if (lv === 3 && !(r.wr030 >= r.wr050 && r.wr050 >= r.wr050d)) fails.push(`保護L3 階梯不符 (${(r.wr030*100|0)}/${(r.wr050*100|0)}/${(r.wr050d*100|0)}) → gradientLevel 改 2/1/0`);
-        if ((openBySym.get(r.sym) || 0) >= perSymMax) fails.push(`同股已達 perSymMax ${perSymMax} → perSymMax 升到 ${perSymMax+1}`);
+        if (lv === 1 && !(r.wr050 >= r.wr050d)) fails.push(`【保護L1 不符】wr050 < wr050d ${_whereHint("gradientLevel", "L1", "L0（關閉保護）")}`);
+        if (lv === 2 && !(r.wr030 >= r.wr050d)) fails.push(`【保護L2 不符】wr030 < wr050d ${_whereHint("gradientLevel", "L2", "L1 或 L0")}`);
+        if (lv === 3 && !(r.wr030 >= r.wr050 && r.wr050 >= r.wr050d)) fails.push(`【保護L3 階梯不符】wr030/050/050d = ${(r.wr030*100|0)}/${(r.wr050*100|0)}/${(r.wr050d*100|0)} ${_whereHint("gradientLevel", "L3", "L2 / L1 / L0")}`);
+        if ((openBySym.get(r.sym) || 0) >= perSymMax) fails.push(`【同股已滿】此股已持 ${openBySym.get(r.sym)} 筆，上限 ${perSymMax} ${_whereHint("perSymMax", `${perSymMax}`, `${perSymMax+1}`)}`);
         const brk = r.brk;
-        if (simCfg.requireHistTurnUp && !(brk && (brk.histTurnUp || brk.retest))) fails.push("MACD-H 未翻紅 → 關閉 requireHistTurnUp");
-        if ((+simCfg.minVolBurstAuto || 0) > 0 && !(brk && brk.volRatio >= simCfg.minVolBurstAuto)) fails.push(`量比 ×${brk?.volRatio?.toFixed(1) ?? "?"} < ×${simCfg.minVolBurstAuto} → minVolBurstAuto 降到 ${(Math.max(0, (brk?.volRatio || 0))).toFixed(1)}`);
-        if ((+simCfg.rsiMaxAuto || 0) > 0 && typeof r.rsi5 === "number" && r.rsi5 > simCfg.rsiMaxAuto) fails.push(`RSI ${r.rsi5.toFixed(0)} > ${simCfg.rsiMaxAuto} → rsiMaxAuto 升到 ${Math.ceil(r.rsi5)}`);
+        if (simCfg.requireHistTurnUp && !(brk && (brk.histTurnUp || brk.retest))) {
+          fails.push(`【MACD-H 未翻紅】此檔不是「動能初始點」也非 retest ${_whereHint("requireHistTurnUp")}`);
+        }
+        if ((+simCfg.minVolBurstAuto || 0) > 0 && !(brk && brk.volRatio >= simCfg.minVolBurstAuto)) {
+          const cur = brk?.volRatio?.toFixed(1) ?? "?";
+          const tgt = Math.max(0, +cur || 0).toFixed(1);
+          fails.push(`【量比不足】此檔 ×${cur}，門檻 ×${simCfg.minVolBurstAuto} ${_whereHint("minVolBurstAuto", `×${simCfg.minVolBurstAuto}`, `×${tgt}`)}`);
+        }
+        if ((+simCfg.rsiMaxAuto || 0) > 0 && typeof r.rsi5 === "number" && r.rsi5 > simCfg.rsiMaxAuto) {
+          fails.push(`【RSI 過熱】此檔 ${r.rsi5.toFixed(0)}，上限 ${simCfg.rsiMaxAuto} ${_whereHint("rsiMaxAuto", `${simCfg.rsiMaxAuto}`, `${Math.ceil(r.rsi5)}`)}`);
+        }
         const pmMode = simCfg.preMarketBuyMode || 'normal';
         if (pmMode !== 'normal' && typeof _usSessionOfTs === 'function') {
           const sess = _usSessionOfTs(Date.now());
           if (sess !== 'rth') {
-            if (pmMode === 'disabled') fails.push(`盤前/後 disabled (sess=${sess}) → preMarketBuyMode 改 normal/breakoutOnly`);
-            else if (pmMode === 'breakoutOnly' && !(brk && (brk.breakout || brk.retest))) fails.push(`盤前/後 breakoutOnly 未突破 (sess=${sess}) → preMarketBuyMode 改 normal`);
+            if (pmMode === 'disabled') fails.push(`【盤前/後禁買】目前時段 ${sess}，模式=disabled ${_whereHint("preMarketBuyMode", "disabled", "normal 或 breakoutOnly")}`);
+            else if (pmMode === 'breakoutOnly' && !(brk && (brk.breakout || brk.retest))) fails.push(`【盤前/後非突破】時段 ${sess}，模式=breakoutOnly 但此檔未突破/回測 ${_whereHint("preMarketBuyMode", "breakoutOnly", "normal")}`);
           }
         }
-        if (simCfg.requireBreakout && !(brk && (brk.breakout || brk.retest))) fails.push("requireBreakout 未突破 → 關閉 requireBreakout");
+        if (simCfg.requireBreakout && !(brk && (brk.breakout || brk.retest))) {
+          fails.push(`【未突破/回測】此檔不是 breakout 也不是 retest ${_whereHint("requireBreakout")}`);
+        }
         const guard = (typeof THR !== "undefined" && +THR.chasedGuardMul) || +simCfg.chasedGuardAtrMul || 0;
         if (guard > 0 && brk && brk.atrPct != null && brk.distToHigh20Pct != null && brk.distToHigh20Pct > brk.atrPct * guard) {
-          fails.push(`追高 距20H ${brk.distToHigh20Pct.toFixed(2)}% > ATR ${brk.atrPct.toFixed(2)}% ×${guard} → chasedGuardAtrMul 升到 ${(brk.distToHigh20Pct/brk.atrPct).toFixed(2)} 或設 0`);
+          const need = (brk.distToHigh20Pct / brk.atrPct).toFixed(2);
+          fails.push(`【追高警示】距20H ${brk.distToHigh20Pct.toFixed(2)}% > ATR ${brk.atrPct.toFixed(2)}% × ${guard} ${_whereHint("chasedGuardAtrMul", `×${guard}`, `×${need}`)}`);
         }
         return fails;
       };
@@ -9236,9 +9289,10 @@ async function runSimAutoScan(force) {
     _logOnce("auto-scan-debug-empty", 30_000, () => {
       _logSim("reject", "—", `🔍 掃描 ${rows.length} 檔 → 0 候選`, { top: rejectBreakdown.slice(0, 3).join(" | ") });
       if (bestRejectInfo) {
-        const note = `${bestRejectInfo.sym} (wr030/050/050d=${bestRejectInfo.wr}) 缺 ${bestRejectInfo.fails.length} 項: ` + bestRejectInfo.fails.join(" | ");
-        _logSim("reject", bestRejectInfo.sym, `🎯 最接近通過`, { 調整建議: note });
-        try { console.log("[sim debug] 最接近通過:", note); } catch {}
+        // 一行一個失敗項，方便閱讀
+        const note = `${bestRejectInfo.sym} (wr030/050/050d=${bestRejectInfo.wr}) 缺 ${bestRejectInfo.fails.length} 項：\n` + bestRejectInfo.fails.map((s, i) => `  ${i+1}. ${s}`).join("\n");
+        _logSim("reject", bestRejectInfo.sym, `🎯 最接近通過 — 調哪個設定可以買`, { 詳情: note });
+        try { console.log("[sim debug] 最接近通過:\n" + note); } catch {}
       }
     });
   }
