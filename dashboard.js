@@ -7075,6 +7075,127 @@ function _netPnl(t, exitPx) {
   return { gross, fee, net, netPct, costBasis };
 }
 
+// v.48 模擬下單前置檢查：以唯讀方式重現 addSimTrade 所有闘關，
+// 回傳「哪些規則符合 / 哪些不符合」 + 目標是否需要被 FIX。
+function _simPrecheck(sym, originalTarget, marketPrice) {
+  const now = Date.now();
+  const checks = [];
+  // 1. 股票代碼 + 即時價
+  checks.push({
+    name: "股票代碼 + 即時價",
+    pass: !!sym && isFinite(marketPrice) && marketPrice > 0,
+    detail: `${sym} @ $${(+marketPrice || 0).toFixed(2)}`,
+  });
+  // 2. 交易時段
+  const sessLbl = _sessionLabel(_usSessionOfTs(now));
+  checks.push({
+    name: "交易時段",
+    pass: _canTradeNow(simCfg.sessionMode, now),
+    detail: `當下 ${sessLbl}，規則=${simCfg.sessionMode}`,
+  });
+  // 目標 FIX：僅買進側套用，規則設定高於膠囊內建時拉高
+  const cfgT = +simCfg.targetPct || 0;
+  let effectiveTarget = originalTarget;
+  let fixNote = null;
+  if (originalTarget > 0 && cfgT > 0 && originalTarget < cfgT) {
+    effectiveTarget = cfgT;
+    fixNote = `膠囊內建 +${(originalTarget*100).toFixed(2)}% 低於規則目標 +${(cfgT*100).toFixed(2)}% → 自動拉高為 +${(cfgT*100).toFixed(2)}%`;
+  }
+  // 3. 每單金額
+  const amt = +simCfg.amountPerTradeUsd || 0;
+  checks.push({
+    name: "每單金額",
+    pass: amt > 0,
+    detail: amt > 0 ? `$${amt}` : "$0（請到規則設定→倒金子調高）",
+  });
+  // 4. 每股上限 perSymMax
+  const perMax = Math.max(1, simCfg.perSymMax | 0);
+  const activeSame = simTrades.filter(t => (t.status === "open" || t.status === "pending" || t.status === "selling") && t.sym === sym).length;
+  checks.push({
+    name: "每股上限",
+    pass: activeSame < perMax,
+    detail: `目前 active=${activeSame}，上限 ${perMax}`,
+  });
+  // 5. 3 秒去重
+  const dup = simTrades.find(t =>
+    (t.status === "pending" || t.status === "open") && t.sym === sym &&
+    Math.sign(t.targetPct) === Math.sign(effectiveTarget) &&
+    Math.abs(t.targetPct) === Math.abs(effectiveTarget) &&
+    (now - (t.placedTime || t.buyTime || 0)) < 3 * 1000
+  );
+  checks.push({
+    name: "3 秒去重",
+    pass: !dup,
+    detail: dup ? "3 秒內已有同方向同目標掛單" : "無重複",
+  });
+  // 6. v.45 unfilled 冷卻
+  const coolSec = Math.max(0, +simCfg.unfilledCooldownSec || 0);
+  let coolPass = true;
+  let coolDetail;
+  if (coolSec <= 0) {
+    coolDetail = `unfilledCooldownSec=0（停用）`;
+  } else {
+    let lastU = 0;
+    for (const t of simTrades) {
+      if (t.sym === sym && t.status === "unfilled" && (t.exitTime || 0) > lastU) lastU = t.exitTime || 0;
+    }
+    if (lastU <= 0) {
+      coolDetail = `無 unfilled 紀錄（冷卻 ${coolSec}s）`;
+    } else {
+      const elapsed = Math.floor((now - lastU) / 1000);
+      if (elapsed < coolSec) {
+        coolPass = false;
+        coolDetail = `上次 unfilled ${elapsed}s 前 < ${coolSec}s（冗餘 ${coolSec - elapsed}s）`;
+      } else {
+        coolDetail = `上次 unfilled ${elapsed}s 前 ≥ ${coolSec}s（已過）`;
+      }
+    }
+  }
+  checks.push({ name: "unfilled 冷卻", pass: coolPass, detail: coolDetail });
+  // 7. 手續費上限比例
+  const maxFeePct = Math.max(0, Math.min(1, +simCfg.maxFeePctOfAmount || 0));
+  let feePass = true;
+  let feeDetail = "maxFeePctOfAmount=0（停用上限）";
+  if (maxFeePct > 0 && amt > 0 && marketPrice > 0) {
+    const estShares = Math.max(1, Math.floor(amt / Math.max(0.0001, marketPrice)) || 1);
+    const estCost = estShares * marketPrice;
+    const estFee = (+simCfg.feeBuyUsd || 0) + estCost * (+simCfg.feeBuyPct || 0)
+                 + (+simCfg.feeSellUsd || 0) + estCost * (+simCfg.feeSellPct || 0);
+    const ratio = estFee / Math.max(0.0001, estCost);
+    feePass = ratio <= maxFeePct;
+    feeDetail = `估手續費 $${estFee.toFixed(2)} / 成本 $${estCost.toFixed(2)} = ${(ratio*100).toFixed(2)}% vs 上限 ${(maxFeePct*100).toFixed(2)}%`;
+  }
+  checks.push({ name: "手續費比例", pass: feePass, detail: feeDetail });
+  const allPass = checks.every(c => c.pass);
+  return { checks, allPass, effectiveTarget, originalTarget, fixNote };
+}
+
+function _simPrecheckMessage(sym, marketPrice, report) {
+  const lines = [];
+  lines.push(`模擬下單前置檢查：${sym} @ $${(+marketPrice || 0).toFixed(2)}`);
+  lines.push("");
+  if (report.fixNote) {
+    lines.push("🔧 目標自動修正 (FIX)：");
+    lines.push(`  • ${report.fixNote}`);
+    lines.push("");
+  }
+  const passList = report.checks.filter(c => c.pass);
+  const failList = report.checks.filter(c => !c.pass);
+  lines.push(`✅ 符合規則 (${passList.length})：`);
+  for (const c of passList) lines.push(`  • ${c.name} — ${c.detail}`);
+  if (failList.length) {
+    lines.push("");
+    lines.push(`❌ 不符合規則 (${failList.length})：`);
+    for (const c of failList) lines.push(`  • ${c.name} — ${c.detail}`);
+  }
+  lines.push("");
+  const tgtStr = (report.effectiveTarget > 0 ? "+" : "") + (report.effectiveTarget * 100).toFixed(2) + "%";
+  lines.push(report.allPass
+    ? `→ 全部規則通過，確定送出 ${tgtStr} 模擬單？`
+    : `→ 有 ${failList.length} 項不符合，確定仍要嘗試送出 ${tgtStr}？addSimTrade 仍會在內部 reject，可在試單日誌看原因。`);
+  return lines.join("\n");
+}
+
 function addSimTrade(sym, targetPct, marketPrice, opts) {
   const _src = (opts && opts.testSource) || ((opts && opts.auto) ? "auto" : "manual");
   if (!sym || !isFinite(marketPrice) || marketPrice <= 0) {
@@ -9777,11 +9898,11 @@ function bindWrMiniClicks(card, sym) {
       else if (el.querySelector(".wr-v-050")) target =  0.005;
       else if (el.querySelector(".wr-v-050d")) target = -0.005;
       if (!target) return;
-      // 買入膠囊：若膠囊內建目標 < 規則設定的 simCfg.targetPct，改用使用者設定的較高目標
-      const cfgTarget = +simCfg.targetPct || 0;
-      if (target > 0 && cfgTarget > 0 && target < cfgTarget) {
-        target = cfgTarget;
-      }
+      // v.48 前置檢查：列出符合/不符合的規則 + 目標是否 FIX
+      // (原本「膠囊內建目標 < simCfg.targetPct → 拉高」邏輯已移到 _simPrecheck 內)
+      const report = _simPrecheck(sym, target, price);
+      if (!confirm(_simPrecheckMessage(sym, price, report))) return;
+      target = report.effectiveTarget;
       const snap = (typeof wlData !== "undefined" && wlData) ? wlData.get(sym) : null;
       // 強制本機模擬、不走 WS
       const t = addSimTrade(sym, target, price, Object.assign({
