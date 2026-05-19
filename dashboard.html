@@ -647,6 +647,10 @@ optimistic 樂觀：last ≤ limit 即成交，成交價 = last；用於快速�
       <div class="sim-log-panel">
         <div class="sim-log-head">
           <span class="sim-log-title">🧾 試單日誌 <span class="sim-log-hint">最近 80 筆，含被規則阻擋的原因</span></span>
+          <label class="sim-log-toggle" title="開啟後，每次 auto-scan 若 0 候選會把『拒絕原因 breakdown』寫入此日誌 + console.log（30 秒去重），方便排查為什麼一直不買。&#10;&#10;hover 上方的『自動：...掃 N、候選 0』狀態文字也會顯示同樣的 breakdown。">
+            <input type="checkbox" id="simDebugScan">
+            <span>🔍 診斷掃描</span>
+          </label>
           <button type="button" id="simLogClearBtn" class="ghost" title="清空試單日誌">清空</button>
         </div>
         <div id="simLogList" class="sim-log-list"></div>

@@ -1717,6 +1717,15 @@ tr.row-hot td.sym { color: #ff7043; font-weight: 700; }
 .sim-log-panel #simLogClearBtn {
   margin-left: auto; font-size: 11px; padding: 2px 10px;
 }
+.sim-log-toggle {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-left: auto;
+  font-size: 11px; color: #9aa0a6; cursor: pointer;
+  user-select: none;
+}
+.sim-log-toggle input { margin: 0; cursor: pointer; }
+.sim-log-toggle:hover { color: #cdd1d6; }
+.sim-log-panel #simLogClearBtn { margin-left: 0; }
 .sim-log-list {
   max-height: 200px; overflow: auto;
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;

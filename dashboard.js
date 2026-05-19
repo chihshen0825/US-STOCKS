@@ -6485,6 +6485,8 @@ const SIM_DEFAULT_CFG = {
   requireHistTurnUp: true,
   minVolBurstAuto: 2.0,
   rsiMaxAuto: 75,
+  // v.26 診斷模式：開啓後每次 auto-scan 未找到候選時，會把按規則拒絕的原因 breakdown 寫到 console 與「試單日誌」。預設關；調試「為什麼不買」時開。
+  debugScan: false,
   // 執行模式：0 = 本地模擬（1 = WS 實交
   executionMode: 0,
   wsUrl: "ws://127.0.0.1:1088/",
@@ -8015,6 +8017,15 @@ function bindSimPanel() {
     _simLog.length = 0;
     _renderSimLog();
   });
+  const dbg = document.getElementById("simDebugScan");
+  if (dbg) {
+    dbg.checked = !!simCfg.debugScan;
+    dbg.addEventListener("change", () => {
+      simCfg.debugScan = dbg.checked;
+      try { if (typeof saveSimCfg === "function") saveSimCfg(); } catch {}
+      if (dbg.checked) _logSim("accept", "—", "🔍 診斷掃描已開啟（auto-scan 0 候選時會在此列出 Top 拒絕原因）");
+    });
+  }
   _renderSimLog();
   document.getElementById("simClearAllBtn")?.addEventListener("click", clearAllSimTrades);
   document.getElementById("simExportCsvBtn")?.addEventListener("click", exportSimTradesCsv);
@@ -8985,46 +8996,51 @@ async function runSimAutoScan(force) {
   const perSymMax = Math.max(1, simCfg.perSymMax | 0);
 
   const rows = [...wlData.values()];
-  const candidates = rows.filter(r => {
-    if (!r || typeof r.wr030 !== "number" || typeof r.wr050 !== "number" || typeof r.wr050d !== "number") return false;
-    if (r.wr030 < simCfg.wrMin) return false;
-    if (r.wr050 < simCfg.wrMin050) return false;
-    // -0.5% 賠率上限保護：wr050d 太高 → 拒絕
-    if ((+simCfg.wrMax050d || 0) > 0 && r.wr050d > simCfg.wrMax050d) return false;
-    // 最小股價過濾：避免 penny stock / sub-penny tick
+  // v.26 診斷模式：將 filter 拆成「逐項評估，回傳第一個拒絕原因」→ 可彙總顯示為什麼 0 候選
+  const _reject = (r) => {
+    if (!r || typeof r.wr030 !== "number" || typeof r.wr050 !== "number" || typeof r.wr050d !== "number") return "❌ 缺資料 (wr030/050/050d)";
+    if (r.wr030 < simCfg.wrMin) return `❌ wr030 ${(r.wr030*100|0)}% < ${(simCfg.wrMin*100|0)}%`;
+    if (r.wr050 < simCfg.wrMin050) return `❌ wr050 ${(r.wr050*100|0)}% < ${(simCfg.wrMin050*100|0)}%`;
+    if ((+simCfg.wrMax050d || 0) > 0 && r.wr050d > simCfg.wrMax050d) return `❌ wr050d ${(r.wr050d*100|0)}% > 上限 ${(simCfg.wrMax050d*100|0)}%`;
     if ((+simCfg.minPriceUsd || 0) > 0) {
       const px = (typeof r.price === "number" && r.price > 0) ? r.price : null;
-      if (px !== null && px < simCfg.minPriceUsd) return false;
+      if (px !== null && px < simCfg.minPriceUsd) return `❌ 股價 $${px.toFixed(2)} < $${simCfg.minPriceUsd}`;
     }
     const lv = Math.max(0, Math.min(3, simCfg.gradientLevel | 0));
-    if (lv === 1 && !(r.wr050 >= r.wr050d)) return false;
-    if (lv === 2 && !(r.wr030 >= r.wr050d)) return false;
-    if (lv === 3 && !(r.wr030 >= r.wr050 && r.wr050 >= r.wr050d)) return false;
-    if ((openBySym.get(r.sym) || 0) >= perSymMax) return false;
-    // v.21：起漲點過濾
+    if (lv === 1 && !(r.wr050 >= r.wr050d)) return `❌ 保護L1 wr050 < wr050d`;
+    if (lv === 2 && !(r.wr030 >= r.wr050d)) return `❌ 保護L2 wr030 < wr050d`;
+    if (lv === 3 && !(r.wr030 >= r.wr050 && r.wr050 >= r.wr050d)) return `❌ 保護L3 階梯不符 (${(r.wr030*100|0)}/${(r.wr050*100|0)}/${(r.wr050d*100|0)})`;
+    if ((openBySym.get(r.sym) || 0) >= perSymMax) return `❌ 同股已達 perSymMax ${perSymMax}`;
     const brk = r.brk;
-    // v.25 起漲品質確認（避免假信號 / 沒力道的低量反彈）
-    // d1) MACD-H 必翸正：只買動能初始點，避免個股適中達的偽突破（retest 仍允許）
-    if (simCfg.requireHistTurnUp && !(brk && (brk.histTurnUp || brk.retest))) return false;
-    // d2) 量比下限：狂漲顯量確認，避免低量裝子假突破
-    if ((+simCfg.minVolBurstAuto || 0) > 0 && !(brk && brk.volRatio >= simCfg.minVolBurstAuto)) return false;
-    // d3) RSI 上限：避免追在已狂漲過熱的頂部
-    if ((+simCfg.rsiMaxAuto || 0) > 0 && typeof r.rsi5 === "number" && r.rsi5 > simCfg.rsiMaxAuto) return false;
-    // a) 盤前/後模式
+    if (simCfg.requireHistTurnUp && !(brk && (brk.histTurnUp || brk.retest))) return "❌ MACD-H 未翻紅 (且非 retest)";
+    if ((+simCfg.minVolBurstAuto || 0) > 0 && !(brk && brk.volRatio >= simCfg.minVolBurstAuto)) return `❌ 量比 ×${brk?.volRatio?.toFixed(1) ?? "?"} < ×${simCfg.minVolBurstAuto}`;
+    if ((+simCfg.rsiMaxAuto || 0) > 0 && typeof r.rsi5 === "number" && r.rsi5 > simCfg.rsiMaxAuto) return `❌ RSI ${r.rsi5.toFixed(0)} > ${simCfg.rsiMaxAuto}`;
     const pmMode = simCfg.preMarketBuyMode || 'normal';
     if (pmMode !== 'normal' && typeof _usSessionOfTs === 'function') {
       const sess = _usSessionOfTs(Date.now());
       if (sess !== 'rth') {
-        if (pmMode === 'disabled') return false;
-        if (pmMode === 'breakoutOnly' && !(brk && (brk.breakout || brk.retest))) return false;
+        if (pmMode === 'disabled') return `❌ 盤前/後 disabled (sess=${sess})`;
+        if (pmMode === 'breakoutOnly' && !(brk && (brk.breakout || brk.retest))) return `❌ 盤前/後 breakoutOnly 未突破 (sess=${sess})`;
       }
     }
-    // b) 全時段都要 breakout
-    if (simCfg.requireBreakout && !(brk && (brk.breakout || brk.retest))) return false;
-    // c) 追高守門：已偏離 20 高 > ATR×N → 拒絕（優先讀 THR.chasedGuardMul，否則退回 simCfg）
+    if (simCfg.requireBreakout && !(brk && (brk.breakout || brk.retest))) return "❌ requireBreakout 未突破/回測";
     const guard = (typeof THR !== "undefined" && +THR.chasedGuardMul) || +simCfg.chasedGuardAtrMul || 0;
     if (guard > 0 && brk && brk.atrPct != null && brk.distToHigh20Pct != null
-        && brk.distToHigh20Pct > brk.atrPct * guard) return false;
+        && brk.distToHigh20Pct > brk.atrPct * guard) return `❌ 追高 距20H ${brk.distToHigh20Pct.toFixed(2)}% > ATR ${brk.atrPct.toFixed(2)}% ×${guard}`;
+    return null;
+  };
+  const rejectCounts = new Map(); // 原因 → 次數
+  const rejectSamples = new Map(); // 原因 → 前幾檔 sym
+  const candidates = rows.filter(r => {
+    const why = _reject(r);
+    if (why) {
+      rejectCounts.set(why, (rejectCounts.get(why) || 0) + 1);
+      if (r && r.sym) {
+        const arr = rejectSamples.get(why) || [];
+        if (arr.length < 3) { arr.push(r.sym); rejectSamples.set(why, arr); }
+      }
+      return false;
+    }
     return true;
   });
   // 排序：有 breakout 的優先（同 wr 條件下），其次 retest，再依 wr030 / wr050
@@ -9064,14 +9080,36 @@ async function runSimAutoScan(force) {
     }
   }
 
+  // v.26 拒絕原因 breakdown（按次數排序，最多顯示 6 項）
+  const rejectBreakdown = [...rejectCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([why, n]) => {
+      const samples = rejectSamples.get(why) || [];
+      return `${why} ×${n}${samples.length ? ` (e.g. ${samples.join(",")})` : ""}`;
+    });
+  const reasonText = candidates.length === 0
+    ? (rejectBreakdown.length
+        ? `0 候選\n${rejectBreakdown.join("\n")}`
+        : "無符合條件個股")
+    : (placed > 0 ? `下單 ${placed} 筆（限價挂單，待成交）` : "有候選但無可用價");
+
   _simLastScan = {
     time: Date.now(),
     wlSize: rows.length,
     candidates: candidates.length,
     placed,
-    reason: candidates.length === 0 ? "無符合條件個股" : (placed > 0 ? `下單 ${placed} 筆（限價挂單，待成交）` : "有候選但無可用價")
+    rejectBreakdown,
+    reason: reasonText,
   };
   _renderSimAutoStatusLive();
+  // v.26 診斷模式：把詳細拒絕原因寫入 console（每次 scan）+ 試單日誌（每次 scan，去重 30s）
+  if (simCfg.debugScan && candidates.length === 0 && rejectBreakdown.length) {
+    try { console.log("[sim debug] 0 候選 — 拒絕原因 breakdown:\n  " + rejectBreakdown.join("\n  ")); } catch {}
+    _logOnce("auto-scan-debug-empty", 30_000, () => {
+      _logSim("reject", "—", `🔍 掃描 ${rows.length} 檔 → 0 候選`, { top: rejectBreakdown.slice(0, 3).join(" | ") });
+    });
+  }
   // 每 30 秒輸出一次 top 候選（每次 scan 都印太吵）
   _logOnce("auto-scan-top", 30_000, () => console.log("[sim auto]", _simLastScan, "top:", candidates.slice(0, 3).map(r => `${r.sym} wr030=${(r.wr030*100|0)}% wr050=${(r.wr050*100|0)}% wr050d=${(r.wr050d*100|0)}%`)));
 }
