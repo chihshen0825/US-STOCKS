@@ -7861,6 +7861,17 @@ function _jumpToSetting(key) {
     // v.73: 目前規則 summary 內的設定 → 直跳齒輪面板
     scanIntervalSec:   { sel: '#simCfgScanSec',                 kind: "sim" },
     wrMinSim:          { sel: '#simCfgWrMin',                   kind: "sim" },
+    // v.75: 補齊遺漏的 jump keys
+    maxFeePct:         { sel: '#simCfgMaxFeePct',               kind: "sim" },
+    chasePanicPct:     { sel: '#simCfgChasePanicPct',           kind: "sim" },
+    chasePanicMul:     { sel: '#simCfgChasePanicMul',           kind: "sim" },
+    maxBumpCount:      { sel: '#simCfgMaxBumpCount',            kind: "sim" },
+    maxSlipPct:        { sel: '#simCfgMaxSlipPct',              kind: "sim" },
+    exitMode:          { sel: '#simCfgExitMode',                kind: "sim" },
+    exitChaseBumpSec:  { sel: '#simCfgExitChaseBumpSec',        kind: "sim" },
+    exitChaseBumpPct:  { sel: '#simCfgExitChaseBumpPct',        kind: "sim" },
+    exitChasePanicPct: { sel: '#simCfgExitChasePanicPct',       kind: "sim" },
+    exitChasePanicMul: { sel: '#simCfgExitChasePanicMul',       kind: "sim" },
     windowMin:         { sel: '#simCfgWindow',                  kind: "sim" },
     targetPct:         { sel: '#simCfgTarget',                  kind: "sim" },
     concurrency:       { sel: '#simCfgConc',                    kind: "sim" },
@@ -7959,6 +7970,17 @@ function _inlineAdjustSetting(key, anchorEl) {
     // v.73: 目前規則 summary 內可即時調整的設定（與 _jumpToSetting 對齊）
     scanIntervalSec:   { sel: '#simCfgScanSec',                 panel: "sim" },
     wrMinSim:          { sel: '#simCfgWrMin',                   panel: "sim" },
+    // v.75: 補齊遺漏的 jump keys
+    maxFeePct:         { sel: '#simCfgMaxFeePct',               panel: "sim" },
+    chasePanicPct:     { sel: '#simCfgChasePanicPct',           panel: "sim" },
+    chasePanicMul:     { sel: '#simCfgChasePanicMul',           panel: "sim" },
+    maxBumpCount:      { sel: '#simCfgMaxBumpCount',            panel: "sim" },
+    maxSlipPct:        { sel: '#simCfgMaxSlipPct',              panel: "sim" },
+    exitMode:          { sel: '#simCfgExitMode',                panel: "sim" },
+    exitChaseBumpSec:  { sel: '#simCfgExitChaseBumpSec',        panel: "sim" },
+    exitChaseBumpPct:  { sel: '#simCfgExitChaseBumpPct',        panel: "sim" },
+    exitChasePanicPct: { sel: '#simCfgExitChasePanicPct',       panel: "sim" },
+    exitChasePanicMul: { sel: '#simCfgExitChasePanicMul',       panel: "sim" },
     windowMin:         { sel: '#simCfgWindow',                  panel: "sim" },
     targetPct:         { sel: '#simCfgTarget',                  panel: "sim" },
     concurrency:       { sel: '#simCfgConc',                    panel: "sim" },
@@ -10753,6 +10775,18 @@ function _renderSimRule() {
   const smCls   = smode === "rth" ? "rule-up" : "rule-down";
   const wrRth   = !!simCfg.wrRthOnly;
   const extPct  = (+simCfg.extendedFeePct || 0) * 100;
+  // v.75: 補齊遺漏的設定
+  const w050d   = Math.round((+simCfg.wrMax050d || 0) * 100);    // -0.5% 賠率上限
+  const maxFee  = (+simCfg.maxFeePct || 0) * 100;                  // 買收費率上限
+  const cppct   = +simCfg.chasePanicPct || 0;                     // 追價 panic 買賣價差門檻
+  const cpmul   = +simCfg.chasePanicMul || 1;                     // 追價 panic 倍率
+  const mbc     = +simCfg.maxBumpCount || 0;                      // 最多追價次數
+  const msp     = (+simCfg.maxSlipPct || 0) * 100;                // 最大滑價
+  const exitOn  = !!simCfg.exitMode;                              // 出場追價
+  const ecbs    = +simCfg.exitChaseBumpSec || 0.1;
+  const ecbp    = +simCfg.exitChaseBumpPct || 0.01;
+  const ecpp    = +simCfg.exitChasePanicPct || 0;
+  const ecpm    = +simCfg.exitChasePanicMul || 1;
 
   // 回本門檻（與目標卡同算法）
   let beStr = "—";
@@ -10791,6 +10825,7 @@ function _renderSimRule() {
     `<span class="rule-sep">且</span>② <b class="rule-key rule-jump" data-jump-key="wrMin050" title="點擊跳到「wrMin050」設定">漲 0.5% 機率 ≥ ${w050}%</b>` +
     `<span class="rule-sep">且</span>③ 保護等級 ${J("gradientLevel", `L${lv}`)} → ${gradMap[lv]}` +
     (mpr > 0 ? `<span class="rule-sep">且</span>④ 股價 ${J("minPriceUsd", `≥ $${mpr}`)}` : "") +
+    (w050d > 0 ? `<span class="rule-sep">且</span>⑤ 跟 0.5% 機率 ${J("wrMax050d", `≤ ${w050d}%`)}` : "") +
     `；通過者依 <b class="rule-up">漲 0.3% 機率高→低</b> 排序。`;
 
   const lineTarget =
@@ -10824,7 +10859,8 @@ function _renderSimRule() {
     (fbPct > 0 ? ` + ${J("feeBuyPct", `${fbPct.toFixed(3)}%`)}` : "") +
     `<span class="rule-sep">·</span>賣出 ${J("feeSellUsd", `$${fsUsd.toFixed(2)}`)}` +
     (fsPct > 0 ? ` + ${J("feeSellPct", `${fsPct.toFixed(3)}%`)}` : "") +
-    `<span class="rule-sep">·</span>匯率 ${J("fxUsdTwd", `1 USD = ${fxRate.toFixed(1)} TWD`)}`;
+    `<span class="rule-sep">·</span>匯率 ${J("fxUsdTwd", `1 USD = ${fxRate.toFixed(1)} TWD`)}` +
+    (maxFee > 0 ? `<span class="rule-sep">·</span>買收費率上限 ${J("maxFeePct", `≤ ${maxFee.toFixed(2)}%`)}` : "");
 
   const execBits = [];
   execBits.push(isWs
@@ -10833,7 +10869,16 @@ function _renderSimRule() {
   execBits.push(`進場模式 ${J("entryMode", _simEntryModeLabel(mode))}`);
   if (isChase) {
     execBits.push(`追價 每 ${J("chaseBumpSec", `${cbs}s`)} 加 ${J("chaseBumpPct", `${cbp}%`)}，最久 ${J("chaseMaxSec", `${cms}s`)}`);
+    const chaseExtra = [];
+    if (cppct > 0) chaseExtra.push(`panic 價差≥ ${J("chasePanicPct", `${cppct.toFixed(2)}%`)} × ${J("chasePanicMul", `${cpmul}`)}`);
+    if (mbc > 0) chaseExtra.push(`最多 ${J("maxBumpCount", `${mbc}`)} 次`);
+    if (msp > 0) chaseExtra.push(`滑價上限 ${J("maxSlipPct", `${msp.toFixed(2)}%`)}`);
+    if (chaseExtra.length) execBits.push(chaseExtra.join(" / "));
   }
+  execBits.push(exitOn
+    ? `出場追價 <b class="rule-key rule-jump rule-up" data-jump-key="exitMode" title="點擊跳到「exitMode」設定">開</b> 每 ${J("exitChaseBumpSec", `${ecbs}s`)} 加 ${J("exitChaseBumpPct", `${ecbp}%`)}` +
+      (ecpp > 0 ? `，panic 價差≥ ${J("exitChasePanicPct", `${ecpp.toFixed(2)}%`)} × ${J("exitChasePanicMul", `${ecpm}`)}` : "")
+    : `出場追價 <b class="rule-key rule-jump rule-mute" data-jump-key="exitMode" title="點擊跳到「exitMode」設定">關</b>`);
   execBits.push(`交易時段 <b class="rule-key rule-jump ${smCls}" data-jump-key="sessionMode" title="點擊跳到「sessionMode」設定">${smLabel}</b>`);
   if (extPct > 0 && smode !== "rth") {
     execBits.push(`盤前/後手續費加成 ${J("extendedFeePct", `+${extPct.toFixed(3)}%`)}`);
