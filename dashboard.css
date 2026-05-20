@@ -3766,3 +3766,140 @@ select.pretty-select option[value=""] {
     border-color: #a5d6a7;
   }
 }
+
+/* ===================================================================
+ * v.81: 統一「設定」UI 體驗
+ *   1) hover → 淡綠光暈邊框
+ *   2) 點擊/focus → 螢火蟲綠光呼吸（uiSettingFirefly）
+ *   3) 右鍵 ctx-menu 邊框 → 淡綠色
+ *   4) 線上更版彈窗（.update-banner）按鈕 hover 同調綠光
+ * 影響範圍：.sim-ctrl / .sim-ctrl-pair / .ctx-menu / .threshold-row /
+ *           .update-banner ub-btn / ub-close
+ * 不覆寫 sim-ctrl-glow / glow-pink / glow-cyan 既有彩色螢火蟲
+ * =================================================================== */
+@keyframes uiSettingFirefly {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0),
+                0 0 6px 1px rgba(76, 175, 80, 0.35);
+    border-color: rgba(129, 199, 132, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.18),
+                0 0 14px 3px rgba(76, 175, 80, 0.65);
+    border-color: #81c784;
+  }
+}
+@keyframes uiSettingHoverPulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(129, 199, 132, 0.35),
+                         0 0 8px 1px rgba(76, 175, 80, 0.30); }
+  50%      { box-shadow: 0 0 0 1px rgba(129, 199, 132, 0.55),
+                         0 0 12px 2px rgba(76, 175, 80, 0.50); }
+}
+
+/* sim-ctrl / sim-ctrl-pair：hover 綠光，focus-within 螢火蟲 */
+.sim-ctrl,
+.sim-ctrl-pair {
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.sim-ctrl:hover,
+.sim-ctrl-pair:hover {
+  border-color: #81c784;
+  animation: uiSettingHoverPulse 2.0s ease-in-out infinite;
+}
+.sim-ctrl:focus-within,
+.sim-ctrl-pair:focus-within {
+  animation: uiSettingFirefly 1.8s ease-in-out infinite;
+  border-color: #81c784;
+}
+/* 既有彩色螢火蟲卡（金/粉/青）：hover/focus 時不覆寫邊框色，僅疊外光 */
+.sim-ctrl-glow:hover,
+.sim-ctrl-glow:focus-within,
+.sim-ctrl-glow-pink:hover,
+.sim-ctrl-glow-pink:focus-within,
+.sim-ctrl-pair-glow:hover,
+.sim-ctrl-pair-glow:focus-within,
+.sim-ctrl-pair-glow-cyan:hover,
+.sim-ctrl-pair-glow-cyan:focus-within {
+  border-color: inherit;
+  animation: simCtrlGlow 2.4s ease-in-out infinite,
+             uiSettingHoverPulse 2.0s ease-in-out infinite;
+  box-shadow: 0 0 0 1px rgba(129, 199, 132, 0.45),
+              0 0 14px 2px rgba(76, 175, 80, 0.45);
+}
+
+/* threshold-row：hover 微光（無 border 時用 outline 取代） */
+.threshold-row {
+  border-radius: 4px;
+  padding: 2px 4px;
+  transition: background .15s ease, box-shadow .15s ease, outline-color .15s ease;
+  outline: 1px solid transparent;
+}
+.threshold-row:hover {
+  background: rgba(76, 175, 80, 0.06);
+  outline-color: rgba(129, 199, 132, 0.45);
+}
+.threshold-row:focus-within {
+  background: rgba(76, 175, 80, 0.10);
+  outline-color: #81c784;
+  animation: uiSettingFirefly 1.8s ease-in-out infinite;
+}
+
+/* ctx-menu：邊框改為淡綠色，hover 項目綠調 */
+.ctx-menu {
+  border-color: rgba(129, 199, 132, 0.55) !important;
+  box-shadow: 0 12px 32px rgba(0,0,0,.55),
+              0 2px 6px rgba(0,0,0,.4),
+              0 0 0 1px rgba(76, 175, 80, 0.15);
+}
+.ctx-menu .ctx-item {
+  transition: background .12s ease, color .12s ease, box-shadow .12s ease;
+}
+.ctx-menu .ctx-item:not(.disabled):not(.danger):hover {
+  background: rgba(76, 175, 80, 0.18);
+  color: #e8f5e9;
+  box-shadow: inset 0 0 0 1px rgba(129, 199, 132, 0.55);
+}
+.ctx-menu .ctx-item:not(.disabled):active {
+  animation: uiSettingFirefly 0.9s ease-in-out 1;
+}
+
+/* update-banner：已有綠色框，補上 hover/click 一致性 */
+.update-banner {
+  border-color: rgba(129, 199, 132, 0.55) !important;
+}
+.update-banner .ub-btn {
+  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease, color .15s ease;
+}
+.update-banner .ub-secondary:hover {
+  background: rgba(76, 175, 80, 0.18);
+  color: #e8f5e9;
+  border-color: #81c784;
+  box-shadow: 0 0 8px 1px rgba(76, 175, 80, 0.45);
+}
+.update-banner .ub-primary:hover {
+  border-color: #a5d6a7;
+  box-shadow: 0 0 10px 2px rgba(76, 175, 80, 0.60);
+}
+.update-banner .ub-btn:active {
+  animation: uiSettingFirefly 0.9s ease-in-out 1;
+}
+.update-banner .ub-close {
+  transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+}
+.update-banner .ub-close:hover {
+  border-color: #81c784;
+  background: rgba(76, 175, 80, 0.18);
+  color: #e8f5e9;
+  box-shadow: 0 0 6px 1px rgba(76, 175, 80, 0.45);
+}
+
+/* prefers-reduced-motion：關閉所有 v.81 動畫，保留純色變化 */
+@media (prefers-reduced-motion: reduce) {
+  .sim-ctrl:hover, .sim-ctrl-pair:hover,
+  .sim-ctrl:focus-within, .sim-ctrl-pair:focus-within,
+  .threshold-row:focus-within,
+  .ctx-menu .ctx-item:active,
+  .update-banner .ub-btn:active {
+    animation: none;
+  }
+}
