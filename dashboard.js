@@ -7860,6 +7860,7 @@ function _jumpToSetting(key) {
     perSymMax:         { sel: '#simCfgPerSym',                  kind: "sim" },
     // v.73: 目前規則 summary 內的設定 → 直跳齒輪面板
     scanIntervalSec:   { sel: '#simCfgScanSec',                 kind: "sim" },
+    wrMinSim:          { sel: '#simCfgWrMin',                   kind: "sim" },
     windowMin:         { sel: '#simCfgWindow',                  kind: "sim" },
     targetPct:         { sel: '#simCfgTarget',                  kind: "sim" },
     concurrency:       { sel: '#simCfgConc',                    kind: "sim" },
@@ -7957,6 +7958,7 @@ function _inlineAdjustSetting(key, anchorEl) {
     perSymMax:         { sel: '#simCfgPerSym',                  panel: "sim" },
     // v.73: 目前規則 summary 內可即時調整的設定（與 _jumpToSetting 對齊）
     scanIntervalSec:   { sel: '#simCfgScanSec',                 panel: "sim" },
+    wrMinSim:          { sel: '#simCfgWrMin',                   panel: "sim" },
     windowMin:         { sel: '#simCfgWindow',                  panel: "sim" },
     targetPct:         { sel: '#simCfgTarget',                  panel: "sim" },
     concurrency:       { sel: '#simCfgConc',                    panel: "sim" },
@@ -10785,7 +10787,7 @@ function _renderSimRule() {
   // ===== 各分類內容 =====
   const lineScan =
     `每 ${J("scanIntervalSec", `${sec}s`)} 掃描備選清單，同時滿足：` +
-    `① <b class="rule-key rule-jump" data-jump-key="wrMin" title="點擊跳到「wrMin」設定">漲 0.3% 機率 ≥ ${w030}%</b>` +
+    `① <b class="rule-key rule-jump" data-jump-key="wrMinSim" title="點擊跳到「wrMin」設定">漲 0.3% 機率 ≥ ${w030}%</b>` +
     `<span class="rule-sep">且</span>② <b class="rule-key rule-jump" data-jump-key="wrMin050" title="點擊跳到「wrMin050」設定">漲 0.5% 機率 ≥ ${w050}%</b>` +
     `<span class="rule-sep">且</span>③ 保護等級 ${J("gradientLevel", `L${lv}`)} → ${gradMap[lv]}` +
     (mpr > 0 ? `<span class="rule-sep">且</span>④ 股價 ${J("minPriceUsd", `≥ $${mpr}`)}` : "") +
