@@ -7583,6 +7583,66 @@ function _showConfirmModal(opts) {
   });
 }
 
+// v.59：診斷掃描 LOG 點開後顯示不符規則清單的 DIV 浮層
+function _showRejectFailsModal(sym, title, wrStr, fails) {
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[ch]));
+  document.querySelectorAll(".confirm-mask").forEach(n => n.remove());
+  const items = Array.isArray(fails) ? fails : [];
+  const list = items.map((f, i) => {
+    // 嘗試把「【規則】說明 → 在哪裡調」拆成 head / body / hint 三段
+    const txt = String(f || "");
+    let head = "", body = txt, hint = "";
+    const mHead = txt.match(/^【([^】]+)】\s*(.*)$/);
+    if (mHead) { head = mHead[1]; body = mHead[2]; }
+    const arrowIdx = body.indexOf("→");
+    if (arrowIdx >= 0) { hint = body.slice(arrowIdx + 1).trim(); body = body.slice(0, arrowIdx).trim(); }
+    return `
+      <li class="rfm-item">
+        <div class="rfm-num">${i + 1}</div>
+        <div class="rfm-body">
+          ${head ? `<div class="rfm-head">⛔ ${esc(head)}</div>` : ""}
+          <div class="rfm-desc">${esc(body)}</div>
+          ${hint ? `<div class="rfm-hint">🛠 ${esc(hint)}</div>` : ""}
+        </div>
+      </li>`;
+  }).join("");
+  const mask = document.createElement("div");
+  mask.className = "confirm-mask rfm-mask";
+  mask.innerHTML = `
+    <div class="confirm-card rfm-card" role="dialog" aria-modal="true">
+      <div class="confirm-head">
+        <div class="confirm-title">
+          <span class="rfm-sym">${esc(sym || "—")}</span>
+          <span class="rfm-title-text">${esc(title || "不符規則詳情")}</span>
+          ${wrStr ? `<span class="rfm-wr">wr030/050/050d = ${esc(wrStr)}</span>` : ""}
+        </div>
+        <button type="button" class="confirm-x" title="關閉 (Esc)">✕</button>
+      </div>
+      <div class="confirm-body rfm-body">
+        <div class="rfm-summary">共 <b>${items.length}</b> 項不符規則。每項下方的 🛠 為「到哪裡、怎麼調」的建議。</div>
+        <ul class="rfm-list">${list}</ul>
+      </div>
+      <div class="confirm-foot">
+        <button type="button" class="btn-ok primary">知道了</button>
+      </div>
+    </div>`;
+  const finish = () => {
+    document.removeEventListener("keydown", onKey, true);
+    mask.remove();
+  };
+  const onKey = (ev) => {
+    if (ev.key === "Escape" || ev.key === "Enter") { ev.preventDefault(); finish(); }
+  };
+  mask.addEventListener("click", (ev) => { if (ev.target === mask) finish(); });
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(mask);
+  mask.querySelector(".confirm-x")?.addEventListener("click", finish);
+  mask.querySelector(".btn-ok")?.addEventListener("click", finish);
+  setTimeout(() => { try { mask.querySelector(".btn-ok")?.focus(); } catch {} }, 0);
+}
+
 function addSimTrade(sym, targetPct, marketPrice, opts) {
   const _src = (opts && opts.testSource) || ((opts && opts.auto) ? "auto" : "manual");
   if (!sym || !isFinite(marketPrice) || marketPrice <= 0) {
@@ -8186,7 +8246,10 @@ function _renderSimLog() {
     const meta = iconMap[e.action] || { ic: "·", cls: "" };
     const row = document.createElement("div");
     row.className = `sim-log-row ${meta.cls}`;
-    row.title = "點擊複製整行";
+    // v.59：若有 _fails，點擊改為開 DIV 浮層；否則沿用「點擊複製」
+    const hasFails = !!(e.detail && Array.isArray(e.detail._fails) && e.detail._fails.length);
+    row.title = hasFails ? "點擊查看詳細不符規則" : "點擊複製整行";
+    if (hasFails) row.classList.add("sim-log-clickable");
     const span = (cls, text) => {
       const s = document.createElement("span");
       s.className = cls;
@@ -8200,6 +8263,8 @@ function _renderSimLog() {
     if (e.detail && typeof e.detail === "object") {
       const parts = [];
       for (const k of Object.keys(e.detail)) {
+        // v.59：以 _ 開頭的內部欄位 (_fails / _wr / _title) 不顯示在 inline 文字
+        if (k.startsWith("_")) continue;
         const v = e.detail[k];
         if (v == null || v === "") continue;
         parts.push(`${k}=${v}`);
@@ -8209,8 +8274,16 @@ function _renderSimLog() {
         row.appendChild(detSpan);
       }
     }
-    // v.35 點擊複製整行純文字到剪貼簿
+    if (hasFails) {
+      row.appendChild(span("sim-log-more", " 🔍 詳情"));
+    }
+    // v.35 點擊複製整行純文字到剪貼簿（v.59：有 _fails 時改為開 DIV 浮層）
     row.addEventListener("click", async () => {
+      if (hasFails) {
+        try { _showRejectFailsModal(e.sym, e.detail._title || `${e.sym}：不符規則詳情`, e.detail._wr || "", e.detail._fails); }
+        catch (err) { try { console.warn("[sim log] open modal failed", err); } catch {} }
+        return;
+      }
       const txt = row.innerText.replace(/\s+/g, " ").trim();
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -9973,6 +10046,8 @@ async function runSimAutoScan(force) {
     try { console.log("[sim debug] 0 候選 — 拒絕原因 breakdown:\n  " + rejectBreakdown.join("\n  ")); } catch {}
     // v.33 找「最接近通過」的標的：列出全部不符項與如何調設定可以買到
     let bestRejectInfo = null;
+    // v.59：所有 row 的詳細不符項，給非全範圍時逐檔輸出 log
+    let _allRowFailsForLog = null;
     try {
       // 把每個設定 key 翻成「在哪個面板、什麼名字、怎麼調」的人話
       // P1 = 主面板齒輪 → ⚙ 訊號門檻 → 🚀 起漲點策略
@@ -10064,9 +10139,16 @@ async function runSimAutoScan(force) {
       };
       // 評分：fewest fails → highest wr030 → highest wr050
       let bestRow = null, bestFails = null;
+      // v.59: 同時收集「範圍內每一檔」的詳細不符項，供非全範圍時逐檔輸出
+      const allRowFails = [];
       for (const r of rows) {
         const fails = _rejectAll(r);
         if (!fails || !fails.length) continue;
+        allRowFails.push({
+          sym: r.sym,
+          wr: `${(r.wr030*100|0)}/${(r.wr050*100|0)}/${(r.wr050d*100|0)}`,
+          fails,
+        });
         if (!bestRow
             || fails.length < bestFails.length
             || (fails.length === bestFails.length && r.wr030 > bestRow.wr030)
@@ -10081,6 +10163,8 @@ async function runSimAutoScan(force) {
           fails: bestFails,
         };
       }
+      // v.59：把整份 per-row 不符清單塞進 closure 變數，給下方 _logOnce 用
+      _allRowFailsForLog = allRowFails;
     } catch (e) { try { console.warn("[sim debug] bestRejectAll error", e); } catch {} }
 
     _logOnce("auto-scan-debug-empty", 30_000, () => {
@@ -10088,8 +10172,29 @@ async function runSimAutoScan(force) {
       if (bestRejectInfo) {
         // 一行一個失敗項，方便閱讀
         const note = `${bestRejectInfo.sym} (wr030/050/050d=${bestRejectInfo.wr}) 缺 ${bestRejectInfo.fails.length} 項：\n` + bestRejectInfo.fails.map((s, i) => `  ${i+1}. ${s}`).join("\n");
-        _logSim("reject", bestRejectInfo.sym, `🎯 最接近通過 — 調哪個設定可以買`, { 詳情: note });
+        // v.59：附 _fails / _wr，讓 log row 可點開 DIV 浮層看完整不符規則
+        _logSim("reject", bestRejectInfo.sym, `🎯 最接近通過 — 調哪個設定可以買`, {
+          詳情: note,
+          _fails: bestRejectInfo.fails,
+          _wr: bestRejectInfo.wr,
+          _title: `${bestRejectInfo.sym}：最接近通過（缺 ${bestRejectInfo.fails.length} 項）`,
+        });
         try { console.log("[sim debug] 最接近通過:\n" + note); } catch {}
+      }
+      // v.59：非「全部」範圍 → 逐檔輸出詳細不符清單（每筆可點開）
+      if (_scopeMode !== "all" && Array.isArray(_allRowFailsForLog) && _allRowFailsForLog.length) {
+        // 按缺項數由少到多排（最接近通過的先列），同名次數量限制避免洗版
+        const ordered = _allRowFailsForLog
+          .slice()
+          .sort((a, b) => a.fails.length - b.fails.length);
+        for (const info of ordered) {
+          _logSim("reject", info.sym, `📋 範圍內不符規則 — 缺 ${info.fails.length} 項（點開看詳情）`, {
+            wr: info.wr,
+            _fails: info.fails,
+            _wr: info.wr,
+            _title: `${info.sym}：${ordered.length === 1 ? "範圍內 1 檔不符" : "範圍內不符規則"}（缺 ${info.fails.length} 項）`,
+          });
+        }
       }
     });
   }
