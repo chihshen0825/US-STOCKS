@@ -2489,23 +2489,18 @@ tr.row-hot td.sym { color: #ff7043; font-weight: 700; }
   font-size: 40px; line-height: 1;
   color: #9aa0a6;
   padding: 2px 8px;
+  transition: border-color .18s ease, color .18s ease, box-shadow .18s ease, background .18s ease;
 }
-.sim-rule-toggle:hover { border-color: #ffffff; color: #ffffff; }
-/* 規則設定張開時：按鈕外框恆亮（與次層膠囊外框同色）+ 螢火蟲呼吸 */
+/* v.83: 與 #thresholdBtn / #updateBtn hover 風格一致 — 綠色光暈 */
+.sim-rule-toggle:hover {
+  border-color: #81c784;
+  color: #c8e6c9;
+  background: rgba(76, 175, 80, 0.12);
+  box-shadow: 0 0 8px 1px rgba(76, 175, 80, 0.45);
+}
+/* 規則設定張開時：交由 .btn-firefly-pulse 提供綠色螢火蟲；移除原本白色 simToggleBtnGlow */
 .sim-panel:not(.collapsed) #simToggleBtn {
-  border-color: #ffffff;
-  color: #ffffff;
-  animation: simToggleBtnGlow 2.4s ease-in-out infinite;
-}
-@keyframes simToggleBtnGlow {
-  0%, 100% {
-    border-color: #6a6f78;
-    box-shadow: 0 0 3px rgba(255,255,255,0.18), 0 0 0 rgba(255,255,255,0);
-  }
-  50% {
-    border-color: #ffffff;
-    box-shadow: 0 0 10px rgba(255,255,255,0.6), 0 0 18px rgba(255,255,255,0.3);
-  }
+  color: #c8e6c9;
 }
 
 /* 自動狀態 pill + 燈號圓點 */
@@ -3902,4 +3897,34 @@ select.pretty-select option[value=""] {
   .update-banner .ub-btn:active {
     animation: none;
   }
+}
+
+/* ===================================================================
+ * v.83: 三個「設定」按鈕 UI 一致化
+ *   #thresholdBtn (🎛) / #updateBtn (⬆) / #simToggleBtn (⚙)
+ *   hover  → 綠色邊框 + 綠色光暈
+ *   active → 點擊縮放 + 一次螢火蟲閃
+ *   panel開啟 → btn-firefly-pulse (既有 JS 切換)
+ *   move out → 回到預設灰邊框（純 CSS transition 自然回復）
+ * =================================================================== */
+#thresholdBtn,
+#updateBtn,
+#simToggleBtn {
+  transition: border-color .18s ease, color .18s ease, box-shadow .18s ease, background .18s ease, transform .08s ease;
+}
+#thresholdBtn:hover,
+#updateBtn:hover,
+#simToggleBtn:hover {
+  border-color: #81c784 !important;
+  color: #c8e6c9 !important;
+  background: rgba(76, 175, 80, 0.14) !important;
+  box-shadow: 0 0 8px 1px rgba(76, 175, 80, 0.50);
+}
+#thresholdBtn:active,
+#updateBtn:active,
+#simToggleBtn:active {
+  animation: uiSettingFirefly 0.9s ease-in-out 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  #thresholdBtn:active, #updateBtn:active, #simToggleBtn:active { animation: none; }
 }
