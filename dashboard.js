@@ -11159,6 +11159,18 @@ async function initUpdateBanner() {
   } catch {}
   // 綁定 header「⬆」按鈕：永遠開啟更新狀態彈窗（即使沒有新版也能看到設定與目前狀態）
   document.getElementById("updateBtn")?.addEventListener("click", openUpdateStatusPopover);
+  // v.82: 與 #thresholdBtn 一致 — 彈窗開啟時 #updateBtn 顯示綠色螢火蟲呼吸；關閉時清除
+  try {
+    const updBtn = document.getElementById("updateBtn");
+    if (updBtn) {
+      const _syncUpdPulse = () => {
+        const open = !!document.getElementById("updateStatusPop");
+        updBtn.classList.toggle("btn-firefly-pulse", open);
+      };
+      _syncUpdPulse();
+      new MutationObserver(_syncUpdPulse).observe(document.body, { childList: true, subtree: false });
+    }
+  } catch {}
 }
 
 /** 開啟「更新狀態」彈窗：顯示目前版本/最新版/repo 設定/手動檢查。 */
