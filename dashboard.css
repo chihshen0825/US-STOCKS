@@ -3374,6 +3374,42 @@ sup.stale-warn {
   border-radius: 3px;
   word-break: break-word;
 }
+/* v.62: 不符規則 → 直達設定按鈕 */
+.rfm-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rfm-adjust {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 22px; padding: 0 10px;
+  font-size: 11.5px; font-weight: 600; line-height: 1;
+  color: #e1f5fe; background: rgba(33, 150, 243, .18);
+  border: 1px solid rgba(79, 195, 247, .45);
+  border-radius: 11px;
+  cursor: pointer; user-select: none;
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+.rfm-adjust:hover {
+  background: rgba(33, 150, 243, .32);
+  border-color: #4fc3f7;
+  color: #fff;
+}
+.rfm-adjust:active { transform: scale(.96); }
+.rfm-adjust:focus-visible { outline: 2px solid #4fc3f7; outline-offset: 1px; }
+
+/* v.62: 跳到設定後的高亮動畫 */
+@keyframes settingJumpFlash {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 235, 59, .9); background-color: rgba(255, 235, 59, .35); }
+  60%  { box-shadow: 0 0 0 6px rgba(255, 235, 59, 0);  background-color: rgba(255, 235, 59, .15); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 235, 59, 0);    background-color: transparent; }
+}
+.setting-jump-flash {
+  animation: settingJumpFlash 1.6s ease-out;
+  border-radius: 4px;
+}
+.setting-jump-wrap-flash {
+  outline: 2px solid #ffd54f !important;
+  outline-offset: 3px;
+  border-radius: 4px;
+  transition: outline-color 0.3s;
+}
 /* ============================================================ */
 
 .hk-help-pop {

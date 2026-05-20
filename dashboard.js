@@ -7590,19 +7590,22 @@ function _showRejectFailsModal(sym, title, wrStr, fails) {
   }[ch]));
   document.querySelectorAll(".confirm-mask").forEach(n => n.remove());
   const items = Array.isArray(fails) ? fails : [];
-  const list = items.map((f, i) => {
-    // 嘗試把「【規則】說明 → 在哪裡調」拆成 head / body / hint 三段
-    const txt = String(f || "");
+  // v.62: 接受兩種格式 — 舊的字串 / 新的 {text, key}
+  const list = items.map((raw, i) => {
+    const f = (raw && typeof raw === "object") ? raw : { text: String(raw || ""), key: null };
+    const txt = String(f.text || "");
     let head = "", body = txt, hint = "";
     const mHead = txt.match(/^【([^】]+)】\s*(.*)$/);
     if (mHead) { head = mHead[1]; body = mHead[2]; }
     const arrowIdx = body.indexOf("→");
     if (arrowIdx >= 0) { hint = body.slice(arrowIdx + 1).trim(); body = body.slice(0, arrowIdx).trim(); }
+    // v.62: 設定有 key 才顯示「⚙ 調整」直達連結
+    const adjustBtn = f.key ? `<button type="button" class="rfm-adjust" data-key="${esc(f.key)}" title="跳到該設定控制項並 focus／高亮">⚙ 調整</button>` : "";
     return `
       <li class="rfm-item">
         <div class="rfm-num">${i + 1}</div>
         <div class="rfm-body">
-          ${head ? `<div class="rfm-head">⛔ ${esc(head)}</div>` : ""}
+          ${head ? `<div class="rfm-head">⛔ ${esc(head)} ${adjustBtn}</div>` : (adjustBtn ? `<div class="rfm-head">${adjustBtn}</div>` : "")}
           <div class="rfm-desc">${esc(body)}</div>
           ${hint ? `<div class="rfm-hint">🛠 ${esc(hint)}</div>` : ""}
         </div>
@@ -7621,7 +7624,7 @@ function _showRejectFailsModal(sym, title, wrStr, fails) {
         <button type="button" class="confirm-x" title="關閉 (Esc)">✕</button>
       </div>
       <div class="confirm-body rfm-body">
-        <div class="rfm-summary">共 <b>${items.length}</b> 項不符規則。每項下方的 🛠 為「到哪裡、怎麼調」的建議。</div>
+        <div class="rfm-summary">共 <b>${items.length}</b> 項不符規則。每項可按 <b>⚙ 調整</b> 直接跳到該設定控制項。</div>
         <ul class="rfm-list">${list}</ul>
       </div>
       <div class="confirm-foot">
@@ -7640,7 +7643,82 @@ function _showRejectFailsModal(sym, title, wrStr, fails) {
   document.body.appendChild(mask);
   mask.querySelector(".confirm-x")?.addEventListener("click", finish);
   mask.querySelector(".btn-ok")?.addEventListener("click", finish);
+  // v.62: 點「⚙ 調整」→ 關閉 modal + 跳到設定控制項
+  mask.querySelectorAll(".rfm-adjust").forEach(btn => {
+    btn.addEventListener("click", (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      const k = btn.dataset.key;
+      finish();
+      try { _jumpToSetting(k); } catch (err) { try { console.warn("[jumpToSetting]", err); } catch {} }
+    });
+  });
   setTimeout(() => { try { mask.querySelector(".btn-ok")?.focus(); } catch {} }, 0);
+}
+
+// v.62: 跳到設定控制項並高亮 focus。需要時會自動展開門檻浮窗 / 試單面板組。
+function _jumpToSetting(key) {
+  if (!key) return;
+  // key → {selector, kind} ; kind=="thr" 表示需先點 #thresholdBtn 開門檻浮窗
+  const map = {
+    wrMin:             { sel: '[data-sim="wrMin"]',             kind: "thr" },
+    requireBreakout:   { sel: '[data-sim="requireBreakout"]',   kind: "thr" },
+    requireHistTurnUp: { sel: '[data-sim="requireHistTurnUp"]', kind: "thr" },
+    minVolBurstAuto:   { sel: '[data-sim="minVolBurstAuto"]',   kind: "thr" },
+    rsiMaxAuto:        { sel: '[data-sim="rsiMaxAuto"]',        kind: "thr" },
+    preMarketBuyMode:  { sel: '[data-sim="preMarketBuyMode"]',  kind: "thr" },
+    chasedGuardAtrMul: { sel: '[data-thr="chasedGuardMul"]',    kind: "thr" },
+    wrMin050:          { sel: '#simCfgWrMin050',                kind: "sim" },
+    wrMax050d:         { sel: '#simCfgWrMax050d',               kind: "sim" },
+    gradientLevel:     { sel: '#simCfgGradLv',                  kind: "sim" },
+    minPriceUsd:       { sel: '#simCfgMinPrice',                kind: "sim" },
+    perSymMax:         { sel: '#simCfgPerSym',                  kind: "sim" },
+  };
+  const m = map[key];
+  if (!m) return;
+  const _flashAndFocus = (el) => {
+    if (!el) return;
+    try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch { el.scrollIntoView(); }
+    // 控制項本身高亮
+    el.classList.add("setting-jump-flash");
+    setTimeout(() => el.classList.remove("setting-jump-flash"), 1800);
+    // 父層 label / row 也加邊框，更明顯
+    const wrap = el.closest("label, .threshold-row, .sim-ctrl, .sim-cfg-row, tr, div");
+    if (wrap && wrap !== el) {
+      wrap.classList.add("setting-jump-wrap-flash");
+      setTimeout(() => wrap.classList.remove("setting-jump-wrap-flash"), 1800);
+    }
+    try { el.focus({ preventScroll: true }); } catch {}
+  };
+  if (m.kind === "thr") {
+    // 開門檻浮窗（如果尚未開）
+    const btn = document.getElementById("thresholdBtn");
+    const panel = document.querySelector(".threshold-panel, #thresholdPanel, [data-threshold-panel]");
+    const isOpen = panel && panel.offsetParent !== null;
+    if (!isOpen && btn) {
+      try { btn.click(); } catch {}
+    }
+    // 等浮窗打開後 scroll 到目標
+    setTimeout(() => {
+      const el = document.querySelector(m.sel);
+      _flashAndFocus(el);
+    }, isOpen ? 0 : 220);
+    return;
+  }
+  // sim panel
+  const sim = document.getElementById("simPanel");
+  if (sim) {
+    try { sim.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {}
+  }
+  // 試單規則組可能被收合，先展開
+  const groupsHidden = document.querySelector(".sim-panel .sim-group.collapsed, #simPanel .sim-group.collapsed");
+  if (groupsHidden) {
+    const tog = document.getElementById("simToggleBtn");
+    try { tog && tog.click(); } catch {}
+  }
+  setTimeout(() => {
+    const el = document.querySelector(m.sel);
+    _flashAndFocus(el);
+  }, 260);
 }
 
 function addSimTrade(sym, targetPct, marketPrice, opts) {
@@ -10095,59 +10173,61 @@ async function runSimAutoScan(force) {
 
       const _rejectAll = (r) => {
         const fails = [];
+        // v.62: 每項回傳 {text, key} — key 用於 modal「⚙ 調整」直達該設定控制項
+        const _f = (key, text) => fails.push({ key, text });
         if (!r || typeof r.wr030 !== "number" || typeof r.wr050 !== "number" || typeof r.wr050d !== "number") return null;
-        if (r.staleSuspect) fails.push("【stale quote 嫌疑】最新報價疑似凍結，無動作可做 → 等下次掃描刷新報價");
+        if (r.staleSuspect) _f(null, "【stale quote 嫌疑】最新報價疑似凍結，無動作可做 → 等下次掃描刷新報價");
         if (r.wr030 < simCfg.wrMin) {
           const tgt = (Math.floor(r.wr030 * 100));
-          fails.push(`【wr030 不足】此檔 ${(r.wr030*100|0)}%，門檻 ${(simCfg.wrMin*100|0)}% ${_whereHint("wrMin", `${(simCfg.wrMin*100|0)}%`, `${tgt}%`)}`);
+          _f("wrMin", `【wr030 不足】此檔 ${(r.wr030*100|0)}%，門檻 ${(simCfg.wrMin*100|0)}% ${_whereHint("wrMin", `${(simCfg.wrMin*100|0)}%`, `${tgt}%`)}`);
         }
         if (r.wr050 < simCfg.wrMin050) {
           const tgt = (Math.floor(r.wr050 * 100));
-          fails.push(`【wr050 不足】此檔 ${(r.wr050*100|0)}%，門檻 ${(simCfg.wrMin050*100|0)}% ${_whereHint("wrMin050", `${(simCfg.wrMin050*100|0)}%`, `${tgt}%`)}`);
+          _f("wrMin050", `【wr050 不足】此檔 ${(r.wr050*100|0)}%，門檻 ${(simCfg.wrMin050*100|0)}% ${_whereHint("wrMin050", `${(simCfg.wrMin050*100|0)}%`, `${tgt}%`)}`);
         }
         if ((+simCfg.wrMax050d || 0) > 0 && r.wr050d > simCfg.wrMax050d) {
           const tgt = (Math.ceil(r.wr050d * 100));
-          fails.push(`【wr050d 過高】此檔 ${(r.wr050d*100|0)}%，上限 ${(simCfg.wrMax050d*100|0)}% ${_whereHint("wrMax050d", `${(simCfg.wrMax050d*100|0)}%`, `${tgt}%`)}`);
+          _f("wrMax050d", `【wr050d 過高】此檔 ${(r.wr050d*100|0)}%，上限 ${(simCfg.wrMax050d*100|0)}% ${_whereHint("wrMax050d", `${(simCfg.wrMax050d*100|0)}%`, `${tgt}%`)}`);
         }
         if ((+simCfg.minPriceUsd || 0) > 0) {
           const px = (typeof r.price === "number" && r.price > 0) ? r.price : null;
           if (px !== null && px < simCfg.minPriceUsd) {
             const tgt = Math.max(0, Math.floor(px));
-            fails.push(`【股價過低】此檔 $${px.toFixed(2)}，門檻 $${simCfg.minPriceUsd} ${_whereHint("minPriceUsd", `$${simCfg.minPriceUsd}`, `$${tgt}`)}`);
+            _f("minPriceUsd", `【股價過低】此檔 $${px.toFixed(2)}，門檻 $${simCfg.minPriceUsd} ${_whereHint("minPriceUsd", `$${simCfg.minPriceUsd}`, `$${tgt}`)}`);
           }
         }
         const lv = Math.max(0, Math.min(3, simCfg.gradientLevel | 0));
-        if (lv === 1 && !(r.wr050 >= r.wr050d)) fails.push(`【保護L1 不符】wr050 < wr050d ${_whereHint("gradientLevel", "L1", "L0（關閉保護）")}`);
-        if (lv === 2 && !(r.wr030 >= r.wr050d)) fails.push(`【保護L2 不符】wr030 < wr050d ${_whereHint("gradientLevel", "L2", "L1 或 L0")}`);
-        if (lv === 3 && !(r.wr030 >= r.wr050 && r.wr050 >= r.wr050d)) fails.push(`【保護L3 階梯不符】wr030/050/050d = ${(r.wr030*100|0)}/${(r.wr050*100|0)}/${(r.wr050d*100|0)} ${_whereHint("gradientLevel", "L3", "L2 / L1 / L0")}`);
-        if ((openBySym.get(r.sym) || 0) >= perSymMax) fails.push(`【同股已滿】此股已持 ${openBySym.get(r.sym)} 筆，上限 ${perSymMax} ${_whereHint("perSymMax", `${perSymMax}`, `${perSymMax+1}`)}`);
+        if (lv === 1 && !(r.wr050 >= r.wr050d)) _f("gradientLevel", `【保護L1 不符】wr050 < wr050d ${_whereHint("gradientLevel", "L1", "L0（關閉保護）")}`);
+        if (lv === 2 && !(r.wr030 >= r.wr050d)) _f("gradientLevel", `【保護L2 不符】wr030 < wr050d ${_whereHint("gradientLevel", "L2", "L1 或 L0")}`);
+        if (lv === 3 && !(r.wr030 >= r.wr050 && r.wr050 >= r.wr050d)) _f("gradientLevel", `【保護L3 階梯不符】wr030/050/050d = ${(r.wr030*100|0)}/${(r.wr050*100|0)}/${(r.wr050d*100|0)} ${_whereHint("gradientLevel", "L3", "L2 / L1 / L0")}`);
+        if ((openBySym.get(r.sym) || 0) >= perSymMax) _f("perSymMax", `【同股已滿】此股已持 ${openBySym.get(r.sym)} 筆，上限 ${perSymMax} ${_whereHint("perSymMax", `${perSymMax}`, `${perSymMax+1}`)}`);
         const brk = r.brk;
         if (simCfg.requireHistTurnUp && !(brk && (brk.histTurnUp || brk.retest))) {
-          fails.push(`【MACD-H 未翻紅】此檔不是「動能初始點」也非 retest ${_whereHint("requireHistTurnUp")}`);
+          _f("requireHistTurnUp", `【MACD-H 未翻紅】此檔不是「動能初始點」也非 retest ${_whereHint("requireHistTurnUp")}`);
         }
         if ((+simCfg.minVolBurstAuto || 0) > 0 && !(brk && brk.volRatio >= simCfg.minVolBurstAuto)) {
           const cur = brk?.volRatio?.toFixed(1) ?? "?";
           const tgt = Math.max(0, +cur || 0).toFixed(1);
-          fails.push(`【量比不足】此檔 ×${cur}，門檻 ×${simCfg.minVolBurstAuto} ${_whereHint("minVolBurstAuto", `×${simCfg.minVolBurstAuto}`, `×${tgt}`)}`);
+          _f("minVolBurstAuto", `【量比不足】此檔 ×${cur}，門檻 ×${simCfg.minVolBurstAuto} ${_whereHint("minVolBurstAuto", `×${simCfg.minVolBurstAuto}`, `×${tgt}`)}`);
         }
         if ((+simCfg.rsiMaxAuto || 0) > 0 && typeof r.rsi5 === "number" && r.rsi5 > simCfg.rsiMaxAuto) {
-          fails.push(`【RSI 過熱】此檔 ${r.rsi5.toFixed(0)}，上限 ${simCfg.rsiMaxAuto} ${_whereHint("rsiMaxAuto", `${simCfg.rsiMaxAuto}`, `${Math.ceil(r.rsi5)}`)}`);
+          _f("rsiMaxAuto", `【RSI 過熱】此檔 ${r.rsi5.toFixed(0)}，上限 ${simCfg.rsiMaxAuto} ${_whereHint("rsiMaxAuto", `${simCfg.rsiMaxAuto}`, `${Math.ceil(r.rsi5)}`)}`);
         }
         const pmMode = simCfg.preMarketBuyMode || 'normal';
         if (pmMode !== 'normal' && typeof _usSessionOfTs === 'function') {
           const sess = _usSessionOfTs(Date.now());
           if (sess !== 'rth') {
-            if (pmMode === 'disabled') fails.push(`【盤前/後禁買】目前時段 ${sess}，模式=disabled ${_whereHint("preMarketBuyMode", "disabled", "normal 或 breakoutOnly")}`);
-            else if (pmMode === 'breakoutOnly' && !(brk && (brk.breakout || brk.retest))) fails.push(`【盤前/後非突破】時段 ${sess}，模式=breakoutOnly 但此檔未突破/回測 ${_whereHint("preMarketBuyMode", "breakoutOnly", "normal")}`);
+            if (pmMode === 'disabled') _f("preMarketBuyMode", `【盤前/後禁買】目前時段 ${sess}，模式=disabled ${_whereHint("preMarketBuyMode", "disabled", "normal 或 breakoutOnly")}`);
+            else if (pmMode === 'breakoutOnly' && !(brk && (brk.breakout || brk.retest))) _f("preMarketBuyMode", `【盤前/後非突破】時段 ${sess}，模式=breakoutOnly 但此檔未突破/回測 ${_whereHint("preMarketBuyMode", "breakoutOnly", "normal")}`);
           }
         }
         if (simCfg.requireBreakout && !(brk && (brk.breakout || brk.retest))) {
-          fails.push(`【未突破/回測】此檔不是 breakout 也不是 retest ${_whereHint("requireBreakout")}`);
+          _f("requireBreakout", `【未突破/回測】此檔不是 breakout 也不是 retest ${_whereHint("requireBreakout")}`);
         }
         const guard = (typeof THR !== "undefined" && +THR.chasedGuardMul) || +simCfg.chasedGuardAtrMul || 0;
         if (guard > 0 && brk && brk.atrPct != null && brk.distToHigh20Pct != null && brk.distToHigh20Pct > brk.atrPct * guard) {
           const need = (brk.distToHigh20Pct / brk.atrPct).toFixed(2);
-          fails.push(`【追高警示】距20H ${brk.distToHigh20Pct.toFixed(2)}% > ATR ${brk.atrPct.toFixed(2)}% × ${guard} ${_whereHint("chasedGuardAtrMul", `×${guard}`, `×${need}`)}`);
+          _f("chasedGuardAtrMul", `【追高警示】距20H ${brk.distToHigh20Pct.toFixed(2)}% > ATR ${brk.atrPct.toFixed(2)}% × ${guard} ${_whereHint("chasedGuardAtrMul", `×${guard}`, `×${need}`)}`);
         }
         return fails;
       };
@@ -10190,7 +10270,7 @@ async function runSimAutoScan(force) {
       _logSim("reject", "—", _summary, { top: rejectBreakdown.slice(0, 3).join(" | ") || "(全部通過)" });
       if (bestRejectInfo) {
         // 一行一個失敗項，方便閱讀
-        const note = `${bestRejectInfo.sym} (wr030/050/050d=${bestRejectInfo.wr}) 缺 ${bestRejectInfo.fails.length} 項：\n` + bestRejectInfo.fails.map((s, i) => `  ${i+1}. ${s}`).join("\n");
+        const note = `${bestRejectInfo.sym} (wr030/050/050d=${bestRejectInfo.wr}) 缺 ${bestRejectInfo.fails.length} 項：\n` + bestRejectInfo.fails.map((s, i) => `  ${i+1}. ${s.text || s}`).join("\n");
         // v.59：附 _fails / _wr，讓 log row 可點開 DIV 浮層看完整不符規則
         _logSim("reject", bestRejectInfo.sym, `🎯 最接近通過 — 調哪個設定可以買`, {
           詳情: note,
