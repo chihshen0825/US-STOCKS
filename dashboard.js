@@ -8073,6 +8073,19 @@ function _inlineAdjustSetting(key, anchorEl) {
         const sOut = srcCont.querySelector("output");
         if (cOut && sOut) cOut.textContent = sOut.textContent;
       } catch {}
+      // v.78: clone 內 [id] 已被剝掉，所以 _renderSimCfgLabels() 不會更新它；
+      // 直接把原始 .sim-ctrl-val / .threshold-val 的內容鏡像回 clone，
+      // 讓 popup 內的數值跟著動。
+      try {
+        const valSelectors = ".sim-ctrl-val, .threshold-val, .sim-fx-val, b, output";
+        const sVals = srcCont.querySelectorAll(valSelectors);
+        const cVals = clone.querySelectorAll(valSelectors);
+        const n = Math.min(sVals.length, cVals.length);
+        for (let j = 0; j < n; j++) {
+          if (sVals[j] === sEl || cVals[j] === cEl) continue; // 跳過 input 本身
+          cVals[j].innerHTML = sVals[j].innerHTML;
+        }
+      } catch {}
       showSaved();
     };
     cEl.addEventListener("input", relay("input"));
