@@ -2056,10 +2056,20 @@ function bindPanelTabHotkeys() {
       }
       return;
     }
-    // 字母熱鍵：t=最上面, g=分頁列+儀表板, w=備選清單訊號, s=模擬交易紀錄, c=備選清單編輯, ?=顯示說明
+    // 字母熱鍵：t=最上面, b=最下面(v.57), g=分頁列+儀表板, w=備選清單訊號, s=模擬交易紀錄, c=備選清單編輯, ?=顯示說明
     if (k === "t") {
       e.preventDefault();
       try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch { window.scrollTo(0, 0); }
+      return;
+    }
+    // v.57 B：跳到頁面最底端
+    if (k === "b") {
+      e.preventDefault();
+      const bottom = Math.max(
+        document.documentElement.scrollHeight,
+        document.body ? document.body.scrollHeight : 0
+      );
+      try { window.scrollTo({ top: bottom, behavior: "smooth" }); } catch { window.scrollTo(0, bottom); }
       return;
     }
     const jumpMap = { w: "watchlist", s: "simPanel", c: "catalogEditor" };
@@ -2108,6 +2118,7 @@ function _showHotkeyHelp() {
       <div class="hk-help-sec">跳到卡片 / 區塊</div>
       <div class="hk-row"><kbd>1</kbd>…<kbd>9</kbd><span>跳到目前儀表板第 N 張卡片</span></div>
       <div class="hk-row"><kbd>T</kbd><span>跳到頁面最上方</span></div>
+      <div class="hk-row"><kbd>B</kbd><span>跳到頁面最下方 (v.57)</span></div>
       <div class="hk-row"><kbd>G</kbd><span>跳到分頁列 (單按；連按兩下則為循環分頁)</span></div>
       <div class="hk-row"><kbd>W</kbd><span>跳到備選清單訊號 (Watchlist)</span></div>
       <div class="hk-row"><kbd>S</kbd><span>跳到模擬交易紀錄 (Sim)</span></div>
@@ -7471,6 +7482,107 @@ function _showPrecheckModal(sym, marketPrice, report) {
   });
 }
 
+// v.57: 通用 DIV 右鍵選單。items: [{label, danger?, disabled?, onClick}]，分隔線用 {separator:true}
+function _showCtxMenu(x, y, items) {
+  // 移除舊選單
+  document.querySelectorAll(".ctx-menu").forEach(n => n.remove());
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[ch]));
+  const menu = document.createElement("div");
+  menu.className = "ctx-menu";
+  menu.innerHTML = items.map((it, i) => {
+    if (it && it.separator) return `<div class="ctx-sep"></div>`;
+    const cls = ["ctx-item"];
+    if (it.danger) cls.push("danger");
+    if (it.disabled) cls.push("disabled");
+    return `<div class="${cls.join(" ")}" data-i="${i}">${esc(it.label)}</div>`;
+  }).join("");
+  // 先放到 body 量尺寸，再修正位置避免超出視窗
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  document.body.appendChild(menu);
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let nx = x, ny = y;
+  if (nx + mw + 6 > vw) nx = Math.max(4, vw - mw - 6);
+  if (ny + mh + 6 > vh) ny = Math.max(4, vh - mh - 6);
+  menu.style.left = nx + "px";
+  menu.style.top  = ny + "px";
+
+  const close = () => {
+    menu.remove();
+    document.removeEventListener("mousedown", onDown, true);
+    document.removeEventListener("keydown", onKey, true);
+    window.removeEventListener("scroll", close, true);
+    window.removeEventListener("resize", close, true);
+  };
+  const onDown = (ev) => { if (!menu.contains(ev.target)) close(); };
+  const onKey  = (ev) => { if (ev.key === "Escape") { ev.preventDefault(); close(); } };
+  menu.addEventListener("click", (ev) => {
+    const row = ev.target.closest(".ctx-item");
+    if (!row || row.classList.contains("disabled")) return;
+    const idx = parseInt(row.dataset.i, 10);
+    const it = items[idx];
+    close();
+    try { it && typeof it.onClick === "function" && it.onClick(); } catch (err) { console.warn("[ctxMenu]", err); }
+  });
+  // 用 setTimeout 避開觸發開啟用的 mousedown
+  setTimeout(() => {
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("keydown", onKey, true);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close, true);
+  }, 0);
+}
+
+// v.57: 通用 DIV YES/NO 確認框。回傳 Promise<boolean>。opts: {title, message, okText, cancelText, danger}
+function _showConfirmModal(opts) {
+  return new Promise((resolve) => {
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, ch => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[ch]));
+    const o = opts || {};
+    const title = o.title || "確認";
+    const msg = o.message || "";
+    const okText = o.okText || "確定";
+    const cancelText = o.cancelText || "取消";
+    const danger = !!o.danger;
+    // 移除舊 confirm（不影響 precheck 浮層）
+    document.querySelectorAll(".confirm-mask").forEach(n => n.remove());
+    const mask = document.createElement("div");
+    mask.className = "confirm-mask";
+    mask.innerHTML = `
+      <div class="confirm-card ${danger ? "danger" : ""}" role="dialog" aria-modal="true">
+        <div class="confirm-head">
+          <div class="confirm-title">${esc(title)}</div>
+          <button type="button" class="confirm-x" title="取消 (Esc)">✕</button>
+        </div>
+        <div class="confirm-body">${esc(msg).replace(/\n/g, "<br>")}</div>
+        <div class="confirm-foot">
+          <button type="button" class="btn-cancel">${esc(cancelText)}</button>
+          <button type="button" class="btn-ok ${danger ? "danger" : "primary"}">${esc(okText)}</button>
+        </div>
+      </div>`;
+    const finish = (val) => {
+      document.removeEventListener("keydown", onKey, true);
+      mask.remove();
+      resolve(!!val);
+    };
+    const onKey = (ev) => {
+      if (ev.key === "Escape") { ev.preventDefault(); finish(false); }
+      else if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
+    };
+    mask.addEventListener("click", (ev) => { if (ev.target === mask) finish(false); });
+    document.addEventListener("keydown", onKey, true);
+    document.body.appendChild(mask);
+    mask.querySelector(".confirm-x")?.addEventListener("click", () => finish(false));
+    mask.querySelector(".btn-cancel")?.addEventListener("click", () => finish(false));
+    mask.querySelector(".btn-ok")?.addEventListener("click", () => finish(true));
+    setTimeout(() => { try { mask.querySelector(".btn-ok")?.focus(); } catch {} }, 0);
+  });
+}
+
 function addSimTrade(sym, targetPct, marketPrice, opts) {
   const _src = (opts && opts.testSource) || ((opts && opts.auto) ? "auto" : "manual");
   if (!sym || !isFinite(marketPrice) || marketPrice <= 0) {
@@ -9093,7 +9205,7 @@ if (sh)   sh.value   = String(simCfg.amountPerTradeUsd);
   // 啟動時自動線上查一次匯率（靜默；失敗則沿用本地值）
   _fetchFxOnline(false);
 
-  // ===== 右鍵選單：刪除單一筆模擬交易 =====
+  // ===== 右鍵選單：刪除單一筆模擬交易（v.57 改用 DIV 浮層 context menu + DIV confirm）=====
   document.getElementById("simTbody")?.addEventListener("contextmenu", (ev) => {
     const tr = ev.target.closest("tr[data-trade-id]");
     if (!tr) return;
@@ -9103,11 +9215,29 @@ if (sh)   sh.value   = String(simCfg.amountPerTradeUsd);
     const t = simTrades.find(x => String(x.id) === String(tradeId));
     if (!t) return;
     const isWsActive = t.source === "ws" && (t.status === "pending" || t.status === "open" || t.status === "selling");
-    const warn = isWsActive
-      ? `\n\n⚠️ 此筆為 WS 實交中的單（status=${t.status}\uff09。\n只刪除本機記錄，不會朝 TradingService 送取消訂單。\n若需取消訂單，請先按「✕ 刪單」或「✕ 平倉」。`
-      : "";
-    if (!confirm(`刪除這筆記錄？\n${t.sym}  ${(t.targetPct*100).toFixed(2)}%  ${t.status}${warn}`)) return;
-    removeSimTradeById(tradeId);
+    const pct = `${(t.targetPct * 100).toFixed(2)}%`;
+    _showCtxMenu(ev.clientX, ev.clientY, [
+      {
+        label: `刪除這筆  ${t.sym}  ${pct}  ${t.status}`,
+        danger: true,
+        onClick: async () => {
+          const warn = isWsActive
+            ? `\n\n⚠️ 此筆為 WS 實交中的單（status=${t.status}）。\n只刪除本機記錄，不會朝 TradingService 送取消訂單。\n若需取消訂單，請先按「✕ 刪單」或「✕ 平倉」。`
+            : "";
+          const ok = await _showConfirmModal({
+            title: "刪除模擬交易紀錄",
+            message: `確定刪除這筆？\n${t.sym}　目標 ${pct}　status=${t.status}${warn}`,
+            okText: "刪除",
+            cancelText: "取消",
+            danger: true,
+          });
+          if (!ok) return;
+          removeSimTradeById(tradeId);
+        },
+      },
+      { separator: true },
+      { label: "取消", onClick: () => {} },
+    ]);
   });
 
   // ===== WS 手動刪單：透過 tradingClient.abortTrade(wsId)，狀態以 server push 確認 =====

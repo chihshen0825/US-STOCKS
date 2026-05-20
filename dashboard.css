@@ -3200,6 +3200,110 @@ sup.stale-warn {
 .precheck-btns button:focus-visible { outline: 2px solid #4fc3f7; outline-offset: 2px; }
 /* ============================================================ */
 
+/* v.57: DIV 右鍵選單 ================================================ */
+.ctx-menu {
+  position: fixed;
+  z-index: 10010;
+  min-width: 220px;
+  background: linear-gradient(180deg, #232730 0%, #1b1e25 100%);
+  color: #e6ebf2;
+  border: 1px solid #3a3f48;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.4);
+  padding: 4px;
+  font-size: 13px;
+  user-select: none;
+  animation: ctxMenuPop .12s ease-out;
+}
+@keyframes ctxMenuPop { from { transform: translateY(-4px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+.ctx-menu .ctx-item {
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .08s;
+  line-height: 1.35;
+}
+.ctx-menu .ctx-item:hover { background: #2f3540; }
+.ctx-menu .ctx-item.danger { color: #ff8a80; }
+.ctx-menu .ctx-item.danger:hover { background: rgba(244, 67, 54, .18); color: #ff5252; }
+.ctx-menu .ctx-item.disabled { color: #6a6f78; cursor: not-allowed; }
+.ctx-menu .ctx-item.disabled:hover { background: transparent; }
+.ctx-menu .ctx-sep { height: 1px; background: #353a44; margin: 4px 6px; }
+
+/* v.57: DIV YES/NO 確認框 ========================================== */
+.confirm-mask {
+  position: fixed; inset: 0; z-index: 10020;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center;
+  animation: precheckFadeIn .16s ease-out;
+}
+.confirm-card {
+  width: min(440px, 92vw);
+  background: linear-gradient(180deg, #232730 0%, #1a1d24 100%);
+  color: #e6ebf2;
+  border: 1px solid #3a3f48;
+  border-top: 3px solid #4fc3f7;
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.6);
+  overflow: hidden;
+  animation: precheckPop .18s cubic-bezier(.2,.9,.3,1.2);
+}
+.confirm-card.danger { border-top-color: #ef5350; }
+.confirm-head {
+  display: grid; grid-template-columns: 1fr auto; align-items: center;
+  padding: 12px 14px; gap: 8px;
+  background: rgba(255,255,255,.02);
+  border-bottom: 1px solid #2f343d;
+}
+.confirm-title { font-size: 15px; font-weight: 600; letter-spacing: .3px; }
+.confirm-card.danger .confirm-title { color: #ff8a80; }
+.confirm-x {
+  background: transparent; border: 0; color: #9aa1ab;
+  cursor: pointer; font-size: 16px; line-height: 1;
+  padding: 4px 8px; border-radius: 4px;
+}
+.confirm-x:hover { background: #2f3540; color: #fff; }
+.confirm-body {
+  padding: 16px 18px;
+  font-size: 13px; line-height: 1.6;
+  color: #cfd5de;
+  max-height: 60vh; overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.confirm-foot {
+  display: flex; gap: 8px; justify-content: flex-end;
+  padding: 10px 14px;
+  background: rgba(0,0,0,.18);
+  border-top: 1px solid #2f343d;
+}
+.confirm-foot button {
+  padding: 7px 18px;
+  border-radius: 6px;
+  border: 1px solid #3a3f48;
+  background: #2a2f38;
+  color: #dfe3ea;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background .1s, transform .05s;
+}
+.confirm-foot button:hover { background: #353b46; }
+.confirm-foot button:active { transform: translateY(1px); }
+.confirm-foot .btn-ok.primary {
+  background: linear-gradient(135deg, #4fc3f7, #2196f3);
+  border-color: #2196f3; color: #fff; font-weight: 600;
+}
+.confirm-foot .btn-ok.primary:hover { background: linear-gradient(135deg, #80d8ff, #42a5f5); }
+.confirm-foot .btn-ok.danger {
+  background: linear-gradient(135deg, #ef5350, #c62828);
+  border-color: #c62828; color: #fff; font-weight: 600;
+}
+.confirm-foot .btn-ok.danger:hover { background: linear-gradient(135deg, #ff6b6b, #d32f2f); }
+.confirm-foot button:focus-visible { outline: 2px solid #4fc3f7; outline-offset: 2px; }
+/* ============================================================ */
+
 .hk-help-pop {
   position: fixed; right: 16px; bottom: 16px; z-index: 9999;
   background: #1a1d22; color: #dfe3ea;
