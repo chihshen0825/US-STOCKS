@@ -7803,6 +7803,10 @@ function _inlineAdjustSetting(key, anchorEl) {
   // clone 控制項
   const clone = srcCont.cloneNode(true);
   clone.classList.add("rfm-mirror-row");
+  // v.68: 把可能殘留的 jump highlight class 從 clone 上拔掉，避免 popup 內也跟著閃
+  clone.classList.remove("setting-jump-flash", "setting-jump-wrap-flash");
+  clone.querySelectorAll(".setting-jump-flash, .setting-jump-wrap-flash")
+    .forEach(n => n.classList.remove("setting-jump-flash", "setting-jump-wrap-flash"));
   // 移除 id 避免重複（保留原始 id 在原處工作）
   clone.querySelectorAll("[id]").forEach(el => el.removeAttribute("id"));
   // 對 clone 內每個輸入控件，鏡像原始當前值並改為驅動原始元件
