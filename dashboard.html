@@ -87,26 +87,26 @@
       <label class="auto auto-click" title="每隔 N 秒自動點擊指定按鈕（會避開正在執行的刷新）">
         <input type="checkbox" id="autoClickEnable">
         自動點擊
-        <select id="autoClickTarget" title="自動點擊目標">
+        <select id="autoClickTarget" class="pretty-select" title="自動點擊目標">
           <option value="">— 選擇按鈕 —</option>
-          <optgroup label="刷新">
+          <optgroup label="🔄 刷新">
             <option value="refreshBtn">⟳ 手動刷新</option>
           </optgroup>
-          <optgroup label="正向 TOP3">
+          <optgroup label="🟢 正向 TOP3（多方）">
             <option value="topHotBtn">🔥 飆股潛力</option>
-            <option value="topWr050UpBtn">↗ +0.5%勝率</option>
-            <option value="top1Btn">TOP3 1分 BUY</option>
-            <option value="top5Btn">TOP3 5分 BUY</option>
-            <option value="topReboundBtn">TOP3 跌深反彈</option>
-            <option value="topGain1mBtn">TOP3 1分↑漲幅</option>
+            <option value="topWr050UpBtn">↗ +0.5% 勝率</option>
+            <option value="top1Btn">🟢 TOP3 1分 BUY</option>
+            <option value="top5Btn">🟢 TOP3 5分 BUY</option>
+            <option value="topReboundBtn">🪃 TOP3 跌深反彈</option>
+            <option value="topGain1mBtn">📈 TOP3 1分 ↑漲幅</option>
           </optgroup>
-          <optgroup label="反向 TOP3">
+          <optgroup label="🔴 反向 TOP3（空方）">
             <option value="topColdBtn">❄ 超跌續弱</option>
-            <option value="topWr050DownBtn">↘ -0.5%賠率</option>
-            <option value="top1SellBtn">TOP3 1分 SELL</option>
-            <option value="top5SellBtn">TOP3 5分 SELL</option>
-            <option value="topPullbackBtn">TOP3 漲高回檔</option>
-            <option value="topLoss1mBtn">TOP3 1分↓跌幅</option>
+            <option value="topWr050DownBtn">↘ -0.5% 賠率</option>
+            <option value="top1SellBtn">🔴 TOP3 1分 SELL</option>
+            <option value="top5SellBtn">🔴 TOP3 5分 SELL</option>
+            <option value="topPullbackBtn">📉 TOP3 漲高回檔</option>
+            <option value="topLoss1mBtn">📉 TOP3 1分 ↓跌幅</option>
           </optgroup>
         </select>
         <input type="number" id="autoClickInterval" min="5" max="3600" step="1" value="30" title="間隔秒數（5–3600）">
@@ -325,17 +325,27 @@
             <button type="button" id="simFxRefreshBtn" class="sim-fx-refresh" title="重新查詢線上匯率">🔄</button>
           </span>
           <span class="sim-auto-status" id="simAutoStatus"><span class="sim-auto-dot"></span>自動：關閉</span>
-          <select id="simAutoScopeSel" class="sim-auto-scope" title="自動買入掃描範圍。取重複、保留順序；列表內無資料的代碼會被跳過。">
-            <option value="all">全備選股（自動選）</option>
-            <option value="grid1">僅工作區第 1 檔</option>
-            <option value="grid12">僅工作區第 1-2 檔</option>
-            <option value="grid123">僅工作區第 1-3 檔</option>
-            <option value="wl123">僅自選區第 1-3 檔</option>
-            <option value="gridWl16">工作區 + 自選區 共 1-6 檔</option>
-            <option value="pinned">釘選的股票</option>
-            <option value="pinned_wl1">釘選 + 自選區第 1 檔</option>
-            <option value="pinned_wl12">釘選 + 自選區第 1-2 檔</option>
-            <option value="pinned_wl123">釘選 + 自選區第 1-3 檔</option>
+          <select id="simAutoScopeSel" class="sim-auto-scope pretty-select" title="自動買入掃描範圍。取重複、保留順序；列表內無資料的代碼會被跳過。">
+            <optgroup label="🌐 全部">
+              <option value="all">🌐 全備選股（自動選）</option>
+            </optgroup>
+            <optgroup label="🟦 工作區（畫面上）">
+              <option value="grid1">🟦 僅工作區第 1 檔</option>
+              <option value="grid12">🟦 僅工作區第 1-2 檔</option>
+              <option value="grid123">🟦 僅工作區第 1-3 檔</option>
+            </optgroup>
+            <optgroup label="⭐ 自選區">
+              <option value="wl123">⭐ 僅自選區第 1-3 檔</option>
+            </optgroup>
+            <optgroup label="🔀 工作區 + 自選區">
+              <option value="gridWl16">🔀 工作區 + 自選區 共 1-6 檔</option>
+            </optgroup>
+            <optgroup label="📌 釘選相關">
+              <option value="pinned">📌 釘選的股票</option>
+              <option value="pinned_wl1">📌⭐ 釘選 + 自選區第 1 檔</option>
+              <option value="pinned_wl12">📌⭐ 釘選 + 自選區第 1-2 檔</option>
+              <option value="pinned_wl123">📌⭐ 釘選 + 自選區第 1-3 檔</option>
+            </optgroup>
           </select>
           <button type="button" id="simAutoBtn" class="primary">▶ 啟用自動買入</button>
         </div>
