@@ -7114,6 +7114,66 @@ function _netPnl(t, exitPx) {
   return { gross, fee, net, netPct, costBasis };
 }
 
+// v.50 將 runSimAutoScan 內的 _reject 拆出可重用版本，逐項回傳 pass/fail，供模擬下單對話框顯示
+// row 可能為 null（manual 下單時 wlData 尚未有該 sym）→ 回傳 []，呼叫端會顯示「無備選資料」提示
+function _autoBuyChecks(r) {
+  if (!r) return [];
+  const out = [];
+  const _push = (name, pass, detail) => out.push({ name, pass, detail });
+  // 資料完整性
+  const _hasWr = (typeof r.wr030 === "number" && typeof r.wr050 === "number" && typeof r.wr050d === "number");
+  _push("資料完整 (wr030/050/050d)", _hasWr, _hasWr ? `wr030=${(r.wr030*100|0)}% / wr050=${(r.wr050*100|0)}% / wr050d=${(r.wr050d*100|0)}%` : "缺資料");
+  if (!_hasWr) return out;
+  _push("報價非 stale", !r.staleSuspect, r.staleSuspect ? "報價凍結嫌疑" : "正常");
+  _push(`wr030 ≥ ${(simCfg.wrMin*100|0)}%`, r.wr030 >= simCfg.wrMin, `${(r.wr030*100|0)}%`);
+  _push(`wr050 ≥ ${(simCfg.wrMin050*100|0)}%`, r.wr050 >= simCfg.wrMin050, `${(r.wr050*100|0)}%`);
+  const wm050d = +simCfg.wrMax050d || 0;
+  _push(`wr050d ≤ 上限 ${(wm050d*100|0)}%`, !(wm050d > 0 && r.wr050d > wm050d), `${(r.wr050d*100|0)}%${wm050d > 0 ? "" : " (上限停用)"}`);
+  const minPx = +simCfg.minPriceUsd || 0;
+  if (minPx > 0) {
+    const px = (typeof r.price === "number" && r.price > 0) ? r.price : null;
+    _push(`股價 ≥ $${minPx}`, !(px !== null && px < minPx), px !== null ? `$${px.toFixed(2)}` : "無價");
+  }
+  const lv = Math.max(0, Math.min(3, simCfg.gradientLevel | 0));
+  if (lv === 1) _push("保護 L1: wr050 ≥ wr050d", r.wr050 >= r.wr050d, `${(r.wr050*100|0)} vs ${(r.wr050d*100|0)}`);
+  if (lv === 2) _push("保護 L2: wr030 ≥ wr050d", r.wr030 >= r.wr050d, `${(r.wr030*100|0)} vs ${(r.wr050d*100|0)}`);
+  if (lv === 3) _push("保護 L3: wr030 ≥ wr050 ≥ wr050d", (r.wr030 >= r.wr050 && r.wr050 >= r.wr050d), `${(r.wr030*100|0)}/${(r.wr050*100|0)}/${(r.wr050d*100|0)}`);
+  const brk = r.brk;
+  if (simCfg.requireHistTurnUp) {
+    const ok = !!(brk && (brk.histTurnUp || brk.retest));
+    _push("MACD-H 翻紅 (或 retest)", ok, ok ? (brk.histTurnUp ? "已翻紅" : "retest") : "未翻紅");
+  }
+  if ((+simCfg.minVolBurstAuto || 0) > 0) {
+    const v = brk?.volRatio;
+    const ok = !!(brk && v >= simCfg.minVolBurstAuto);
+    _push(`量比 ≥ ×${simCfg.minVolBurstAuto}`, ok, v != null ? `×${v.toFixed(1)}` : "無量比");
+  }
+  if ((+simCfg.rsiMaxAuto || 0) > 0 && typeof r.rsi5 === "number") {
+    _push(`RSI ≤ ${simCfg.rsiMaxAuto}`, r.rsi5 <= simCfg.rsiMaxAuto, r.rsi5.toFixed(0));
+  }
+  const pmMode = simCfg.preMarketBuyMode || 'normal';
+  if (pmMode !== 'normal' && typeof _usSessionOfTs === 'function') {
+    const sess = _usSessionOfTs(Date.now());
+    if (sess !== 'rth') {
+      if (pmMode === 'disabled') _push(`盤前/後 = ${pmMode}`, false, `sess=${sess} 禁止下單`);
+      else if (pmMode === 'breakoutOnly') {
+        const ok = !!(brk && (brk.breakout || brk.retest));
+        _push(`盤前/後 breakoutOnly`, ok, ok ? "突破/回測" : `sess=${sess} 未突破`);
+      }
+    }
+  }
+  if (simCfg.requireBreakout) {
+    const ok = !!(brk && (brk.breakout || brk.retest));
+    _push("起漲點 突破/回測", ok, ok ? (brk.breakout ? "突破" : "回測") : "未突破");
+  }
+  const guard = (typeof THR !== "undefined" && +THR.chasedGuardMul) || +simCfg.chasedGuardAtrMul || 0;
+  if (guard > 0 && brk && brk.atrPct != null && brk.distToHigh20Pct != null) {
+    const ok = brk.distToHigh20Pct <= brk.atrPct * guard;
+    _push(`追高守門 距20H ≤ ATR ×${guard}`, ok, `距=${brk.distToHigh20Pct.toFixed(2)}% / ATR=${brk.atrPct.toFixed(2)}%`);
+  }
+  return out;
+}
+
 // v.48 模擬下單前置檢查：以唯讀方式重現 addSimTrade 所有闘關，
 // 回傳「哪些規則符合 / 哪些不符合」 + 目標是否需要被 FIX。
 function _simPrecheck(sym, originalTarget, marketPrice) {
@@ -7206,32 +7266,58 @@ function _simPrecheck(sym, originalTarget, marketPrice) {
   }
   checks.push({ name: "手續費比例", pass: feePass, detail: feeDetail });
   const allPass = checks.every(c => c.pass);
-  return { checks, allPass, effectiveTarget, originalTarget, fixNote };
+  // v.50 自動下單規則檢查（供對話框顯示「若改用 auto 是否會買」）
+  const _row = (typeof wlData !== "undefined" && wlData) ? wlData.get(sym) : null;
+  const autoChecks = _autoBuyChecks(_row);
+  const autoAllPass = autoChecks.length > 0 && autoChecks.every(c => c.pass);
+  return { checks, allPass, effectiveTarget, originalTarget, fixNote, autoChecks, autoAllPass, hasRow: !!_row };
 }
 
 function _simPrecheckMessage(sym, marketPrice, report) {
+  // v.50 重新編排：分區、單一字元符號 (✓/✗)、欄位對齊，避免螢幕字滿一片難讀
+  const W = 22; // 規則名稱欄寬（中文約 2 半形）
+  const padR = (s) => {
+    s = String(s == null ? "" : s);
+    // 中文字算 2 寬
+    let w = 0; for (const ch of s) w += (ch.charCodeAt(0) > 127 ? 2 : 1);
+    return s + " ".repeat(Math.max(1, W - w));
+  };
+  const fmt = (c) => `  ${c.pass ? "✓" : "✗"} ${padR(c.name)} ${c.detail || ""}`.trimEnd();
   const lines = [];
-  lines.push(`模擬下單前置檢查：${sym} @ $${(+marketPrice || 0).toFixed(2)}`);
-  lines.push("");
-  if (report.fixNote) {
-    lines.push("🔧 目標自動修正 (FIX)：");
-    lines.push(`  • ${report.fixNote}`);
-    lines.push("");
-  }
-  const passList = report.checks.filter(c => c.pass);
-  const failList = report.checks.filter(c => !c.pass);
-  lines.push(`✅ 符合規則 (${passList.length})：`);
-  for (const c of passList) lines.push(`  • ${c.name} — ${c.detail}`);
-  if (failList.length) {
-    lines.push("");
-    lines.push(`❌ 不符合規則 (${failList.length})：`);
-    for (const c of failList) lines.push(`  • ${c.name} — ${c.detail}`);
-  }
-  lines.push("");
   const tgtStr = (report.effectiveTarget > 0 ? "+" : "") + (report.effectiveTarget * 100).toFixed(2) + "%";
-  lines.push(report.allPass
-    ? `→ 全部規則通過，確定送出 ${tgtStr} 模擬單？`
-    : `→ 有 ${failList.length} 項不符合，確定仍要嘗試送出 ${tgtStr}？addSimTrade 仍會在內部 reject，可在試單日誌看原因。`);
+  lines.push(`【模擬下單前置檢查】${sym} @ $${(+marketPrice || 0).toFixed(2)}  → 目標 ${tgtStr}`);
+  lines.push("─".repeat(48));
+  if (report.fixNote) {
+    lines.push("[目標自動修正 FIX]");
+    lines.push(`  ${report.fixNote}`);
+    lines.push("");
+  }
+
+  const basicPass = report.checks.filter(c => c.pass);
+  const basicFail = report.checks.filter(c => !c.pass);
+  lines.push(`[基本規則]  通過 ${basicPass.length} / 不符 ${basicFail.length}`);
+  for (const c of report.checks) lines.push(fmt(c));
+
+  lines.push("");
+  if (!report.hasRow) {
+    lines.push("[自動下單規則]  無備選清單資料 (手動試單可繼續，但無法比對 auto 規則)");
+  } else if (!report.autoChecks.length) {
+    lines.push("[自動下單規則]  無規則可檢查");
+  } else {
+    const aPass = report.autoChecks.filter(c => c.pass);
+    const aFail = report.autoChecks.filter(c => !c.pass);
+    lines.push(`[自動下單規則]  通過 ${aPass.length} / 不符 ${aFail.length}${report.autoAllPass ? "  → auto 會買" : "  → auto 不會買"}`);
+    for (const c of report.autoChecks) lines.push(fmt(c));
+  }
+
+  lines.push("─".repeat(48));
+  if (report.allPass) {
+    lines.push(report.autoAllPass
+      ? `→ 基本規則、自動規則都通過，確定送出 ${tgtStr} 模擬單？`
+      : `→ 基本規則通過（但 auto 規則未全過），確定送出 ${tgtStr}？`);
+  } else {
+    lines.push(`→ 基本規則有 ${basicFail.length} 項不符，addSimTrade 仍會 reject；要強行試單嗎？`);
+  }
   return lines.join("\n");
 }
 
