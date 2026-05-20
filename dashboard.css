@@ -2079,7 +2079,7 @@ tr.row-hot td.sym { color: #ff7043; font-weight: 700; }
   display: flex; flex-direction: column; gap: 6px;
   padding: 8px 10px 10px;
   background: #121620;
-  border: 1px solid #ffffff;
+  border: 1px solid #81c784;
   border-radius: 10px;
 }
 .sim-group-title {
@@ -3929,18 +3929,4 @@ select.pretty-select option[value=""] {
   #thresholdBtn:active, #updateBtn:active, #simToggleBtn:active { animation: none; }
 }
 
-/* ===================================================================
- * v.84: 三個「設定」面板邊框統一為淡亮綠
- *   #thresholdPanel (.settings.threshold-panel) — 開啟時
- *   #simPanel        (.sim-panel)               — 展開時
- *   #updateStatusPop / .update-banner            — 顯示時
- * 同色：#81c784 (Material Light Green 300)；外加 8px 淡綠外光
- * =================================================================== */
-#thresholdPanel:not(.hidden),
-.sim-panel:not(.collapsed),
-.update-banner {
-  border: 1px solid #81c784 !important;
-  box-shadow: 0 0 0 1px rgba(129, 199, 132, 0.20),
-              0 0 12px 2px rgba(76, 175, 80, 0.35),
-              0 8px 24px rgba(0, 0, 0, 0.55) !important;
-}
+/* v.85: 還原 v.84 外框統一（保留各面板原始外框），改將 .sim-group 內框 #ffffff → #81c784 */
