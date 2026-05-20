@@ -7149,60 +7149,200 @@ function _netPnl(t, exitPx) {
 
 // v.50 將 runSimAutoScan 內的 _reject 拆出可重用版本，逐項回傳 pass/fail，供模擬下單對話框顯示
 // row 可能為 null（manual 下單時 wlData 尚未有該 sym）→ 回傳 []，呼叫端會顯示「無備選資料」提示
+// v.69: 加上 key（對應 _jumpToSetting / _inlineAdjustSetting 的設定 key）+ 全部用使用者看得懂的中文重寫
 function _autoBuyChecks(r) {
   if (!r) return [];
   const out = [];
-  const _push = (name, pass, detail) => out.push({ name, pass, detail });
-  // 資料完整性
+  const _push = (name, pass, detail, key) => out.push({ name, pass, detail, key: key || null });
+  // 資料完整性（非設定，無 key）
   const _hasWr = (typeof r.wr030 === "number" && typeof r.wr050 === "number" && typeof r.wr050d === "number");
-  _push("資料完整 (wr030/050/050d)", _hasWr, _hasWr ? `wr030=${(r.wr030*100|0)}% / wr050=${(r.wr050*100|0)}% / wr050d=${(r.wr050d*100|0)}%` : "缺資料");
+  _push(
+    "預測機率資料完整",
+    _hasWr,
+    _hasWr
+      ? `漲0.3%機率=${(r.wr030*100|0)}% / 漲0.5%機率=${(r.wr050*100|0)}% / 跌0.5%機率=${(r.wr050d*100|0)}%`
+      : "缺少機率資料，無法評估"
+  );
   if (!_hasWr) return out;
-  _push("報價非 stale", !r.staleSuspect, r.staleSuspect ? "報價凍結嫌疑" : "正常");
-  _push(`wr030 ≥ ${(simCfg.wrMin*100|0)}%`, r.wr030 >= simCfg.wrMin, `${(r.wr030*100|0)}%`);
-  _push(`wr050 ≥ ${(simCfg.wrMin050*100|0)}%`, r.wr050 >= simCfg.wrMin050, `${(r.wr050*100|0)}%`);
+  _push(
+    "報價即時更新中",
+    !r.staleSuspect,
+    r.staleSuspect ? "報價疑似凍結（資料停滯）" : "正常更新中"
+  );
+  // wr030 ≥ wrMin → 設定 key: wrMin
+  const _p030 = (simCfg.wrMin*100|0);
+  _push(
+    `近期漲 0.3% 機率 ≥ ${_p030}%`,
+    r.wr030 >= simCfg.wrMin,
+    r.wr030 >= simCfg.wrMin
+      ? `目前 ${(r.wr030*100|0)}%（門檻 ${_p030}%，已達標）`
+      : `目前 ${(r.wr030*100|0)}%，未達門檻 ${_p030}%（短期上漲機率不夠）`,
+    "wrMin"
+  );
+  // wr050 ≥ wrMin050 → 設定 key: wrMin050
+  const _p050 = (simCfg.wrMin050*100|0);
+  _push(
+    `近期漲 0.5% 機率 ≥ ${_p050}%`,
+    r.wr050 >= simCfg.wrMin050,
+    r.wr050 >= simCfg.wrMin050
+      ? `目前 ${(r.wr050*100|0)}%（門檻 ${_p050}%，已達標）`
+      : `目前 ${(r.wr050*100|0)}%，未達門檻 ${_p050}%（漲幅機率不夠）`,
+    "wrMin050"
+  );
+  // wr050d ≤ wrMax050d → 設定 key: wrMax050d
   const wm050d = +simCfg.wrMax050d || 0;
-  _push(`wr050d ≤ 上限 ${(wm050d*100|0)}%`, !(wm050d > 0 && r.wr050d > wm050d), `${(r.wr050d*100|0)}%${wm050d > 0 ? "" : " (上限停用)"}`);
+  const _p050d = (wm050d*100|0);
+  {
+    const blocked = (wm050d > 0 && r.wr050d > wm050d);
+    _push(
+      `近期跌 0.5% 機率 ≤ ${_p050d}%`,
+      !blocked,
+      wm050d > 0
+        ? (blocked
+            ? `目前 ${(r.wr050d*100|0)}%，超過上限 ${_p050d}%（下跌風險偏高）`
+            : `目前 ${(r.wr050d*100|0)}%（上限 ${_p050d}%，可接受）`)
+        : `目前 ${(r.wr050d*100|0)}%（上限停用，不卡關）`,
+      "wrMax050d"
+    );
+  }
+  // 股價門檻 → 設定 key: minPriceUsd
   const minPx = +simCfg.minPriceUsd || 0;
   if (minPx > 0) {
     const px = (typeof r.price === "number" && r.price > 0) ? r.price : null;
-    _push(`股價 ≥ $${minPx}`, !(px !== null && px < minPx), px !== null ? `$${px.toFixed(2)}` : "無價");
+    const bad = (px !== null && px < minPx);
+    _push(
+      `股價 ≥ $${minPx}（避開低價股）`,
+      !bad,
+      px !== null
+        ? (bad ? `目前 $${px.toFixed(2)}，低於 $${minPx}` : `目前 $${px.toFixed(2)}`)
+        : "無報價",
+      "minPriceUsd"
+    );
   }
+  // 漸進保護 → 設定 key: gradientLevel
   const lv = Math.max(0, Math.min(3, simCfg.gradientLevel | 0));
-  if (lv === 1) _push("保護 L1: wr050 ≥ wr050d", r.wr050 >= r.wr050d, `${(r.wr050*100|0)} vs ${(r.wr050d*100|0)}`);
-  if (lv === 2) _push("保護 L2: wr030 ≥ wr050d", r.wr030 >= r.wr050d, `${(r.wr030*100|0)} vs ${(r.wr050d*100|0)}`);
-  if (lv === 3) _push("保護 L3: wr030 ≥ wr050 ≥ wr050d", (r.wr030 >= r.wr050 && r.wr050 >= r.wr050d), `${(r.wr030*100|0)}/${(r.wr050*100|0)}/${(r.wr050d*100|0)}`);
+  if (lv === 1) {
+    const ok = r.wr050 >= r.wr050d;
+    _push(
+      "保護 L1：漲 0.5% 機率 ≥ 跌 0.5% 機率",
+      ok,
+      ok
+        ? `漲 ${(r.wr050*100|0)}% ≥ 跌 ${(r.wr050d*100|0)}%（漲贏跌）`
+        : `漲 ${(r.wr050*100|0)}% < 跌 ${(r.wr050d*100|0)}%（跌機率反而比漲高，保護擋下）`,
+      "gradientLevel"
+    );
+  }
+  if (lv === 2) {
+    const ok = r.wr030 >= r.wr050d;
+    _push(
+      "保護 L2：漲 0.3% 機率 ≥ 跌 0.5% 機率",
+      ok,
+      ok
+        ? `漲 ${(r.wr030*100|0)}% ≥ 跌 ${(r.wr050d*100|0)}%`
+        : `漲 ${(r.wr030*100|0)}% < 跌 ${(r.wr050d*100|0)}%（保護 L2 擋下）`,
+      "gradientLevel"
+    );
+  }
+  if (lv === 3) {
+    const ok = (r.wr030 >= r.wr050 && r.wr050 >= r.wr050d);
+    _push(
+      "保護 L3：漲 0.3% ≥ 漲 0.5% ≥ 跌 0.5% 機率",
+      ok,
+      ok
+        ? `${(r.wr030*100|0)}% / ${(r.wr050*100|0)}% / ${(r.wr050d*100|0)}%（遞減正常）`
+        : `${(r.wr030*100|0)}% / ${(r.wr050*100|0)}% / ${(r.wr050d*100|0)}%（沒有遞減，保護 L3 擋下）`,
+      "gradientLevel"
+    );
+  }
+  // MACD-H → 設定 key: requireHistTurnUp
   const brk = r.brk;
   if (simCfg.requireHistTurnUp) {
     const ok = !!(brk && (brk.histTurnUp || brk.retest));
-    _push("MACD-H 翻紅 (或 retest)", ok, ok ? (brk.histTurnUp ? "已翻紅" : "retest") : "未翻紅");
+    _push(
+      "MACD 動能柱翻紅 或 回測支撐",
+      ok,
+      ok
+        ? (brk.histTurnUp ? "動能柱已翻紅（多方接手）" : "形成 retest 回測（再次測底成功）")
+        : "動能柱還沒翻紅、也沒回測（買進訊號不明顯）",
+      "requireHistTurnUp"
+    );
   }
+  // 量比 → 設定 key: minVolBurstAuto
   if ((+simCfg.minVolBurstAuto || 0) > 0) {
     const v = brk?.volRatio;
     const ok = !!(brk && v >= simCfg.minVolBurstAuto);
-    _push(`量比 ≥ ×${simCfg.minVolBurstAuto}`, ok, v != null ? `×${v.toFixed(1)}` : "無量比");
+    _push(
+      `成交量爆量倍數 ≥ ×${simCfg.minVolBurstAuto}`,
+      ok,
+      v != null
+        ? (ok
+            ? `目前 ×${v.toFixed(1)}（爆量充足）`
+            : `目前僅 ×${v.toFixed(1)}，未到 ×${simCfg.minVolBurstAuto}（量能不足）`)
+        : "沒有量比資料",
+      "minVolBurstAuto"
+    );
   }
+  // RSI 上限 → 設定 key: rsiMaxAuto
   if ((+simCfg.rsiMaxAuto || 0) > 0 && typeof r.rsi5 === "number") {
-    _push(`RSI ≤ ${simCfg.rsiMaxAuto}`, r.rsi5 <= simCfg.rsiMaxAuto, r.rsi5.toFixed(0));
+    const ok = r.rsi5 <= simCfg.rsiMaxAuto;
+    _push(
+      `RSI ≤ ${simCfg.rsiMaxAuto}（避免追在過熱）`,
+      ok,
+      ok
+        ? `目前 RSI ${r.rsi5.toFixed(0)}（未過熱）`
+        : `目前 RSI ${r.rsi5.toFixed(0)}，超過 ${simCfg.rsiMaxAuto}（已過熱）`,
+      "rsiMaxAuto"
+    );
   }
+  // 盤前/盤後模式 → 設定 key: preMarketBuyMode
   const pmMode = simCfg.preMarketBuyMode || 'normal';
   if (pmMode !== 'normal' && typeof _usSessionOfTs === 'function') {
     const sess = _usSessionOfTs(Date.now());
     if (sess !== 'rth') {
-      if (pmMode === 'disabled') _push(`盤前/後 = ${pmMode}`, false, `sess=${sess} 禁止下單`);
-      else if (pmMode === 'breakoutOnly') {
+      if (pmMode === 'disabled') {
+        _push(
+          "盤前/盤後不下單",
+          false,
+          `目前處於 ${sess}（非正規盤），設定為「禁止下單」`,
+          "preMarketBuyMode"
+        );
+      } else if (pmMode === 'breakoutOnly') {
         const ok = !!(brk && (brk.breakout || brk.retest));
-        _push(`盤前/後 breakoutOnly`, ok, ok ? "突破/回測" : `sess=${sess} 未突破`);
+        _push(
+          "盤前/盤後 僅買 突破/回測",
+          ok,
+          ok
+            ? `${sess} 但已突破/回測（允許）`
+            : `${sess} 且未突破、未回測（被擋下）`,
+          "preMarketBuyMode"
+        );
       }
     }
   }
+  // 起漲點 → 設定 key: requireBreakout
   if (simCfg.requireBreakout) {
     const ok = !!(brk && (brk.breakout || brk.retest));
-    _push("起漲點 突破/回測", ok, ok ? (brk.breakout ? "突破" : "回測") : "未突破");
+    _push(
+      "K線 突破起漲點 或 回測",
+      ok,
+      ok
+        ? (brk.breakout ? "已突破起漲點" : "形成回測")
+        : "尚未突破起漲點、也沒回測",
+      "requireBreakout"
+    );
   }
+  // 追高守門 → 設定 key: chasedGuardAtrMul
   const guard = (typeof THR !== "undefined" && +THR.chasedGuardMul) || +simCfg.chasedGuardAtrMul || 0;
   if (guard > 0 && brk && brk.atrPct != null && brk.distToHigh20Pct != null) {
     const ok = brk.distToHigh20Pct <= brk.atrPct * guard;
-    _push(`追高守門 距20H ≤ ATR ×${guard}`, ok, `距=${brk.distToHigh20Pct.toFixed(2)}% / ATR=${brk.atrPct.toFixed(2)}%`);
+    _push(
+      `離 20 日高點 ≤ ATR ×${guard}（避免追高）`,
+      ok,
+      ok
+        ? `距離 ${brk.distToHigh20Pct.toFixed(2)}% / ATR ${brk.atrPct.toFixed(2)}%（安全距離內）`
+        : `距離 ${brk.distToHigh20Pct.toFixed(2)}% / ATR ${brk.atrPct.toFixed(2)}%（離高點太遠 = 追高風險）`,
+      "chasedGuardAtrMul"
+    );
   }
   return out;
 }
@@ -7369,6 +7509,21 @@ function _showPrecheckModal(sym, marketPrice, report) {
       `<span class="name">${esc(c.name)}</span>` +
       `<span class="detail">${esc(c.detail || "")}</span>` +
       `</li>`;
+    // v.69: auto 規則項目 — 失敗且有 key 時，加上「⚙ 調整 / ✏ 立即調整」按鈕
+    const fmtAutoItem = (c) => {
+      const btns = (!c.pass && c.key)
+        ? `<span class="precheck-auto-btns">
+             <button type="button" class="precheck-auto-adjust" data-key="${esc(c.key)}" title="跳到該設定控制項並 focus／高亮">⚙ 調整</button>
+             <button type="button" class="precheck-auto-inline" data-key="${esc(c.key)}" title="在此浮窗即時調整，不離開本視窗">✏ 立即調整</button>
+           </span>`
+        : "";
+      return `<li class="${c.pass ? "ok" : "bad"}">` +
+        `<span class="mark" aria-hidden="true">${c.pass ? "✓" : "✗"}</span>` +
+        `<span class="name">${esc(c.name)}</span>` +
+        `<span class="detail">${esc(c.detail || "")}</span>` +
+        btns +
+        `</li>`;
+    };
 
     const tgtPct = (report.effectiveTarget * 100).toFixed(2);
     const tgtSign = report.effectiveTarget > 0 ? "+" : "";
@@ -7418,7 +7573,7 @@ function _showPrecheckModal(sym, marketPrice, report) {
           <span class="cnt cnt-fail ${autoFail ? "" : "zero"}">不符 ${autoFail}</span>
           ${verdict}
         </h4>
-        <ul class="precheck-list">${autoChecks.map(fmtItem).join("")}</ul>
+        <ul class="precheck-list">${autoChecks.map(fmtAutoItem).join("")}</ul>
       </section>`;
     }
 
@@ -7477,6 +7632,23 @@ function _showPrecheckModal(sym, marketPrice, report) {
     mask.querySelector(".precheck-x")?.addEventListener("click", () => finish(false));
     mask.querySelector(".btn-cancel")?.addEventListener("click", () => finish(false));
     mask.querySelector(".btn-ok")?.addEventListener("click", () => finish(true));
+    // v.69: auto 規則「⚙ 調整」→ 關掉浮窗（resolve false 不送單）+ 跳到設定
+    mask.querySelectorAll(".precheck-auto-adjust").forEach(btn => {
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        const k = btn.dataset.key;
+        finish(false);
+        try { _jumpToSetting(k); } catch (err) { try { console.warn("[precheck.jumpToSetting]", err); } catch {} }
+      });
+    });
+    // v.69: auto 規則「✏ 立即調整」→ 不關浮窗，於按鈕旁開鏡像控制項
+    mask.querySelectorAll(".precheck-auto-inline").forEach(btn => {
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        const k = btn.dataset.key;
+        try { _inlineAdjustSetting(k, btn); } catch (err) { try { console.warn("[precheck.inlineAdjust]", err); } catch {} }
+      });
+    });
     // 自動聚焦 OK 按鈕（Enter 直接送出）
     setTimeout(() => { try { mask.querySelector(".btn-ok")?.focus(); } catch {} }, 0);
   });

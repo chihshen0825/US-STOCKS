@@ -3176,7 +3176,7 @@ sup.stale-warn {
 
 .precheck-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .precheck-list li {
-  display: grid; grid-template-columns: 18px minmax(140px, max-content) 1fr; gap: 10px;
+  display: grid; grid-template-columns: 18px minmax(140px, max-content) 1fr auto; gap: 10px;
   align-items: center;
   padding: 5px 8px; border-radius: 6px;
   font-size: 13px; line-height: 1.4;
@@ -3190,6 +3190,30 @@ sup.stale-warn {
 .precheck-list li.bad .name { color: #ffd1cd; }
 .precheck-list li .detail { color: #9aa3ad; font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 .precheck-list li.bad .detail { color: #ffb3a8; }
+
+/* v.69: auto 規則失敗時的「⚙ 調整 / ✏ 立即調整」按鈕（與 .rfm-adjust/.rfm-inline 視覺一致） */
+.precheck-auto-btns { display: inline-flex; gap: 6px; align-items: center; }
+.precheck-auto-adjust, .precheck-auto-inline {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 22px; padding: 0 10px;
+  font-size: 11.5px; font-weight: 600; line-height: 1;
+  border-radius: 11px; cursor: pointer; user-select: none;
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+.precheck-auto-adjust {
+  color: #e1f5fe; background: rgba(33, 150, 243, .18);
+  border: 1px solid rgba(79, 195, 247, .45);
+}
+.precheck-auto-adjust:hover { background: rgba(33, 150, 243, .32); border-color: #4fc3f7; color: #fff; }
+.precheck-auto-adjust:active { transform: scale(.96); }
+.precheck-auto-adjust:focus-visible { outline: 2px solid #4fc3f7; outline-offset: 1px; }
+.precheck-auto-inline {
+  color: #e8f5e9; background: rgba(76, 175, 80, .18);
+  border: 1px solid rgba(129, 199, 132, .45);
+}
+.precheck-auto-inline:hover { background: rgba(76, 175, 80, .32); border-color: #81c784; color: #fff; }
+.precheck-auto-inline:active { transform: scale(.96); }
+.precheck-auto-inline:focus-visible { outline: 2px solid #81c784; outline-offset: 1px; }
 
 .precheck-note { font-size: 12px; color: #9aa3ad; padding: 4px 2px; }
 
