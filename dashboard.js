@@ -10063,33 +10063,34 @@ async function runSimAutoScan(force) {
     let _allRowFailsForLog = null;
     try {
       // 把每個設定 key 翻成「在哪個面板、什麼名字、怎麼調」的人話
-      // P1 = 主面板齒輪 → ⚙ 訊號門檻 → 🚀 起漲點策略
-      // P2 = 試單面板 → 🎯 進場篩選
-      // P3 = 試單面板 → 🛡 風控
-      const P1 = "設定齒輪 → ⚙ 訊號門檻 → 🚀 起漲點策略";
-      const P2 = "試單面板 → 🎯 進場篩選";
-      const P3 = "試單面板 → 🛡 風控";
+      // v.61：修正面板路徑 — 訊號門檻其實是「右上角 🎛 鈕」開的浮窗，不是 ⚙ 齒輪；
+      //        試單面板組名校正為「🎯 進場條件」與「💰 風控 & 手續費」。
+      const P1 = "右上角 🎛 鈕 →「門檻 / Preset」面板 → 🚀 起漲點策略 區段";
+      const P2 = "試單面板 → 🎯 進場條件";
+      const P3 = "試單面板 → 💰 風控 & 手續費";
+      const PRESET_TIP = "（或直接在右上角 🎛 切換 Preset 保守 / 標準 / 激進 一鍵套用一組門檻）";
       const _whereHint = (key, curStr, targetStr) => {
         const map = {
-          wrMin:             { panel: P1, ctrl: "「wrMin 0.3% (%)」滑桿", verb: "拉低到" },
-          wrMin050:          { panel: P2, ctrl: "「漲 0.5% 門檻」滑桿",   verb: "拉低到" },
-          wrMax050d:         { panel: P2, ctrl: "「-0.5% 賠率上限」滑桿", verb: "拉高到" },
-          minPriceUsd:       { panel: P3, ctrl: "「最小股價」滑桿",       verb: "拉低到" },
-          gradientLevel:     { panel: P2, ctrl: "「保護等級」滑桿",       verb: "拉低到" },
+          wrMin:             { panel: P1, ctrl: "「wrMin 0.3% (%)」滑桿",  verb: "拉低到", presetable: true },
+          wrMin050:          { panel: P2, ctrl: "「漲 0.5% 門檻」滑桿",     verb: "拉低到" },
+          wrMax050d:         { panel: P2, ctrl: "「-0.5% 賠率上限」滑桿",   verb: "拉高到" },
+          minPriceUsd:       { panel: P3, ctrl: "「最小股價」滑桿",         verb: "拉低到" },
+          gradientLevel:     { panel: P2, ctrl: "「保護等級」滑桿",         verb: "拉低到" },
           perSymMax:         { panel: P2, ctrl: "「同股最大持單」(若無 UI 則需手動調 storage)", verb: "升到" },
-          requireHistTurnUp: { panel: P1, ctrl: "「MACD-H 必翻紅」勾選",   verb: "取消勾選" },
-          minVolBurstAuto:   { panel: P1, ctrl: "「量比下限 (×N)」滑桿",  verb: "拉低到" },
-          rsiMaxAuto:        { panel: P1, ctrl: "「RSI 上限」滑桿",        verb: "拉高到" },
-          preMarketBuyMode:  { panel: P1, ctrl: "「盤前/後模式」下拉",     verb: "改成" },
-          requireBreakout:   { panel: P1, ctrl: "「只買突破/回測」勾選",   verb: "取消勾選" },
-          chasedGuardAtrMul: { panel: P1, ctrl: "「追高守門 ATR×」滑桿",  verb: "拉高到（或設 0 關閉）" },
+          requireHistTurnUp: { panel: P1, ctrl: "「MACD-H 必翻紅」勾選",     verb: "取消勾選", presetable: true },
+          minVolBurstAuto:   { panel: P1, ctrl: "「量比下限 (×N)」滑桿",    verb: "拉低到", presetable: true },
+          rsiMaxAuto:        { panel: P1, ctrl: "「RSI 上限」滑桿",          verb: "拉高到", presetable: true },
+          preMarketBuyMode:  { panel: P1, ctrl: "「盤前/後模式」下拉",       verb: "改成", presetable: false },
+          requireBreakout:   { panel: P1, ctrl: "「只買突破/回測」勾選",     verb: "取消勾選", presetable: true },
+          chasedGuardAtrMul: { panel: P1, ctrl: "「追高守門 ATR×」滑桿",    verb: "拉高到（或設 0 關閉）", presetable: true },
         };
         const m = map[key];
         if (!m) return "";
+        const tail = m.presetable ? ` ${PRESET_TIP}` : "";
         if (key === "requireHistTurnUp" || key === "requireBreakout") {
-          return `→ 到「${m.panel}」找到 ${m.ctrl}，${m.verb}（目前是勾選）`;
+          return `→ 到「${m.panel}」找到 ${m.ctrl}，${m.verb}（目前是勾選）${tail}`;
         }
-        return `→ 到「${m.panel}」找到 ${m.ctrl}，目前 ${curStr}，${m.verb} ${targetStr}`;
+        return `→ 到「${m.panel}」找到 ${m.ctrl}，目前 ${curStr}，${m.verb} ${targetStr}${tail}`;
       };
 
       const _rejectAll = (r) => {
