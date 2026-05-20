@@ -7702,10 +7702,10 @@ function _jumpToSetting(key) {
     try { el.focus({ preventScroll: true }); } catch {}
   };
   if (m.kind === "thr") {
-    // 開門檻浮窗（如果尚未開）
+    // 開門檻浮窗（如果尚未開）— 用 .hidden class 偵測（v.63 修正：原 offsetParent 偵測不準）
     const btn = document.getElementById("thresholdBtn");
-    const panel = document.querySelector(".threshold-panel, #thresholdPanel, [data-threshold-panel]");
-    const isOpen = panel && panel.offsetParent !== null;
+    const panel = document.getElementById("thresholdPanel");
+    const isOpen = panel && !panel.classList.contains("hidden");
     if (!isOpen && btn) {
       try { btn.click(); } catch {}
     }
@@ -7716,21 +7716,23 @@ function _jumpToSetting(key) {
     }, isOpen ? 0 : 220);
     return;
   }
-  // sim panel
+  // sim panel — v.63 修正：原本檢查 .sim-group.collapsed 是錯的，實際上是 #simPanel.collapsed
   const sim = document.getElementById("simPanel");
-  if (sim) {
-    try { sim.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {}
-  }
-  // 試單規則組可能被收合，先展開
-  const groupsHidden = document.querySelector(".sim-panel .sim-group.collapsed, #simPanel .sim-group.collapsed");
-  if (groupsHidden) {
+  if (sim && sim.classList.contains("collapsed")) {
     const tog = document.getElementById("simToggleBtn");
     try { tog && tog.click(); } catch {}
   }
+  // 等下一格再 scroll，確保展開完成
   setTimeout(() => {
-    const el = document.querySelector(m.sel);
-    _flashAndFocus(el);
-  }, 260);
+    const sim2 = document.getElementById("simPanel");
+    if (sim2) {
+      try { sim2.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {}
+    }
+    setTimeout(() => {
+      const el = document.querySelector(m.sel);
+      _flashAndFocus(el);
+    }, 200);
+  }, 100);
 }
 
 // v.63: 在 reject-fails modal 旁邊的小浮窗即時調整某個 simCfg 設定，不離開本視窗
