@@ -6731,7 +6731,7 @@ const SIM_DEFAULT_CFG = {
   // v11 (2026-05-19): 新預設組（依用戶實戰調整）—— targetPct 0.006→0.004、wrMin050 0.30→0.60、gradientLevel 3→1；standard preset 同步：wrMin050 0.35→0.60、wrMax050d 0.10→0.15、gradientLevel 3→1
   // v12 (2026-05-20): 追價可達性收緊 —— chaseBumpPct 0.01→0.05（步幅 ×5 追得上飆股）、chasePanicGapPct 0.5→0.3（狂飆加速更早觸發）、maxBumpCount 5→8、新增 unfilledCooldownSec=120（同 sym unfilled 後冷卻避免燒追價）
   cfgMigV: 12,
-  // v.49 自動買入掃描範圍：all / grid1 / grid12 / grid123 / wl123 / gridWl16 / pinned / pinned_wl1 / pinned_wl12 / pinned_wl123
+  // v.49 自動買入掃描範圍：all / grid1 / grid12 / grid123 / wl1 / wl12 / wl123 / gridWl16 / pinned / pinned_wl1 / pinned_wl12 / pinned_wl123
   autoScopeMode: "all",
 };
 let simTrades = [];
@@ -6759,6 +6759,8 @@ function _autoScopeSyms(mode) {
     case "grid1":        return take(grid, 1);
     case "grid12":       return take(grid, 2);
     case "grid123":      return take(grid, 3);
+    case "wl1":          return take(wl, 1);
+    case "wl12":         return take(wl, 2);
     case "wl123":        return take(wl, 3);
     case "gridWl16":     return take(merge(grid, wl), 6);
     case "pinned":       return [...pin];
@@ -6772,7 +6774,7 @@ function _autoScopeSyms(mode) {
 function _autoScopeLabel(mode) {
   return ({
     all: "全備選", grid1: "工作區 1", grid12: "工作區 1-2", grid123: "工作區 1-3",
-    wl123: "自選區 1-3", gridWl16: "工+自 1-6", pinned: "釘選",
+    wl1: "自選區 1", wl12: "自選區 1-2", wl123: "自選區 1-3", gridWl16: "工+自 1-6", pinned: "釘選",
     pinned_wl1: "釘選+自選 1", pinned_wl12: "釘選+自選 1-2", pinned_wl123: "釘選+自選 1-3",
   })[mode || "all"] || "全備選";
 }
