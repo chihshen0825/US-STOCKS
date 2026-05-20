@@ -3721,18 +3721,33 @@ select.pretty-select option[value=""] {
 /* === END v.70 pretty-select === */
 
 /* v.73: 規則 summary 內可點擊跳轉到對應齒輪設定 */
+/* v.80: 邊框淡綠色 → 加上螢火蟲呼吸（綠色 firefly pulse），與 toggle 按鈕同調 */
 .rule-key.rule-jump {
   cursor: pointer;
   border-bottom: 1px dashed rgba(76, 175, 80, 0.55);
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
+  animation: ruleJumpFirefly 2.4s ease-in-out infinite;
 }
 .rule-key.rule-jump:hover {
   background: rgba(76, 175, 80, 0.18);
-  border-bottom-color: #81c784;
   color: #c8e6c9;
+  animation-duration: 1.2s;
 }
 .rule-key.rule-jump:active {
   background: rgba(76, 175, 80, 0.28);
+}
+@keyframes ruleJumpFirefly {
+  0%, 100% {
+    border-bottom-color: rgba(76, 175, 80, 0.35);
+    text-shadow: 0 0 0 rgba(129, 199, 132, 0);
+  }
+  50% {
+    border-bottom-color: #81c784;
+    text-shadow: 0 0 6px rgba(129, 199, 132, 0.55), 0 0 12px rgba(76, 175, 80, 0.30);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rule-key.rule-jump { animation: none; }
 }
 
 /* v.76: \u9762\u677f\u5c55\u958b\u6642\u6309\u9215\u908a\u6846\u7da0\u8272\u87a2\u706b\u87f2\u9583\u720d\uff1b\u6536\u5408\u6642\u6e05\u9664 */
