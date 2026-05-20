@@ -371,20 +371,19 @@ button.ghost  { color: #9aa0a6; }
   transition: border-color .2s, transform .12s;
 }
 /* 左上角索引徽章（對應快捷鍵 1~9）；v.47 同時是唯一拖曳扊手 */
-/* v.51 配色比照「工作頁籤」暖色（日落桃金），與所屬頁籤一致 */
 .card .card-idx {
   position: absolute;
   top: -8px; left: -8px;
   min-width: 22px; height: 22px;
   padding: 0 6px;
   display: inline-flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, #ff9a56 0%, #ff6f91 55%, #c2185b 100%);
-  color: #fff8f0;
+  background: linear-gradient(135deg, #4fc3f7 0%, #2196f3 100%);
+  color: #0b0d11;
   font-size: 12px; font-weight: 800;
   font-family: ui-monospace, Consolas, "SF Mono", monospace;
   border-radius: 11px;
   border: 2px solid #14171c;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.5), 0 0 6px rgba(255,154,86,0.45);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
   z-index: 3;
   pointer-events: auto;
   user-select: none;
@@ -392,16 +391,7 @@ button.ghost  { color: #9aa0a6; }
   cursor: grab;
 }
 .card .card-idx:active { cursor: grabbing; }
-.card:hover .card-idx { background: linear-gradient(135deg, #ffb074 0%, #ff85a1 55%, #d63a73 100%); }
-/* v.53 「額外自選頁籤」(冷色冰河極光) —— 其卡片上的索引球恢復為藍色系
-#grid[data-panel="watch"] .card .card-idx {
-  background: linear-gradient(135deg, #4fc3f7 0%, #5e7cff 55%, #7c4dff 100%);
-  color: #f0f8ff;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.5), 0 0 6px rgba(79,195,247,0.45);
-}
-#grid[data-panel="watch"] .card:hover .card-idx {
-  background: linear-gradient(135deg, #80d8ff 0%, #7a9bff 55%, #9575ff 100%);
-}
+.card:hover .card-idx { background: linear-gradient(135deg, #80d8ff 0%, #42a5f5 100%); }
 .card:hover { border-color: #3a4250; transform: translateY(-1px); }
 .card[draggable="true"] { cursor: grab; }
 .card.dragging { opacity: .4; cursor: grabbing; }
