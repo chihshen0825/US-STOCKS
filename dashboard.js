@@ -10358,58 +10358,62 @@ async function runSimAutoScan(force) {
         // v.62: 每項回傳 {text, key} — key 用於 modal「⚙ 調整」直達該設定控制項
         const _f = (key, text) => fails.push({ key, text });
         if (!r || typeof r.wr030 !== "number" || typeof r.wr050 !== "number" || typeof r.wr050d !== "number") return null;
-        if (r.staleSuspect) _f(null, "【stale quote 嫌疑】最新報價疑似凍結，無動作可做 → 等下次掃描刷新報價");
+        if (r.staleSuspect) _f(null, "【報價疑似凍結】最新報價跟之前一樣沒動，可能 feed 卡住或休市；無法判斷現在能不能買 → 等下次掃描刷新報價");
         if (r.wr030 < simCfg.wrMin) {
           const tgt = (Math.floor(r.wr030 * 100));
-          _f("wrMin", `【wr030 不足】此檔 ${(r.wr030*100|0)}%，門檻 ${(simCfg.wrMin*100|0)}% ${_whereHint("wrMin", `${(simCfg.wrMin*100|0)}%`, `${tgt}%`)}`);
+          _f("wrMin", `【漲 0.3% 機率不足 (wr030)】這檔近期「未來短時間內漲到 +0.3% 的歷史機率」只有 ${(r.wr030*100|0)}%，門檻要 ≥ ${(simCfg.wrMin*100|0)}%，機會不夠高就不下單 ${_whereHint("wrMin", `${(simCfg.wrMin*100|0)}%`, `${tgt}%`)}`);
         }
         if (r.wr050 < simCfg.wrMin050) {
           const tgt = (Math.floor(r.wr050 * 100));
-          _f("wrMin050", `【wr050 不足】此檔 ${(r.wr050*100|0)}%，門檻 ${(simCfg.wrMin050*100|0)}% ${_whereHint("wrMin050", `${(simCfg.wrMin050*100|0)}%`, `${tgt}%`)}`);
+          _f("wrMin050", `【漲 0.5% 機率不足 (wr050)】這檔近期「未來短時間內漲到 +0.5% 的歷史機率」只有 ${(r.wr050*100|0)}%，門檻要 ≥ ${(simCfg.wrMin050*100|0)}%，達標機會不夠高就不下單 ${_whereHint("wrMin050", `${(simCfg.wrMin050*100|0)}%`, `${tgt}%`)}`);
         }
         if ((+simCfg.wrMax050d || 0) > 0 && r.wr050d > simCfg.wrMax050d) {
           const tgt = (Math.ceil(r.wr050d * 100));
-          _f("wrMax050d", `【wr050d 過高】此檔 ${(r.wr050d*100|0)}%，上限 ${(simCfg.wrMax050d*100|0)}% ${_whereHint("wrMax050d", `${(simCfg.wrMax050d*100|0)}%`, `${tgt}%`)}`);
+          _f("wrMax050d", `【跌 0.5% 機率過高 (wr050d)】這檔「未來短時間內先跌到 -0.5% 的歷史機率」高達 ${(r.wr050d*100|0)}%，上限只能 ≤ ${(simCfg.wrMax050d*100|0)}%，下殺風險太高就不下單 ${_whereHint("wrMax050d", `${(simCfg.wrMax050d*100|0)}%`, `${tgt}%`)}`);
         }
         if ((+simCfg.minPriceUsd || 0) > 0) {
           const px = (typeof r.price === "number" && r.price > 0) ? r.price : null;
           if (px !== null && px < simCfg.minPriceUsd) {
             const tgt = Math.max(0, Math.floor(px));
-            _f("minPriceUsd", `【股價過低】此檔 $${px.toFixed(2)}，門檻 $${simCfg.minPriceUsd} ${_whereHint("minPriceUsd", `$${simCfg.minPriceUsd}`, `$${tgt}`)}`);
+            _f("minPriceUsd", `【股價過低】目前 $${px.toFixed(2)}，門檻 $${simCfg.minPriceUsd}；低價股 spread 太寬、跳動 0.01 美元就是 0.1%+ 隱性成本，故過濾 ${_whereHint("minPriceUsd", `$${simCfg.minPriceUsd}`, `$${tgt}`)}`);
           }
         }
         const lv = Math.max(0, Math.min(3, simCfg.gradientLevel | 0));
-        if (lv === 1 && !(r.wr050 >= r.wr050d)) _f("gradientLevel", `【保護L1 不符】wr050 < wr050d ${_whereHint("gradientLevel", "L1", "L0（關閉保護）")}`);
-        if (lv === 2 && !(r.wr030 >= r.wr050d)) _f("gradientLevel", `【保護L2 不符】wr030 < wr050d ${_whereHint("gradientLevel", "L2", "L1 或 L0")}`);
-        if (lv === 3 && !(r.wr030 >= r.wr050 && r.wr050 >= r.wr050d)) _f("gradientLevel", `【保護L3 階梯不符】wr030/050/050d = ${(r.wr030*100|0)}/${(r.wr050*100|0)}/${(r.wr050d*100|0)} ${_whereHint("gradientLevel", "L3", "L2 / L1 / L0")}`);
-        if ((openBySym.get(r.sym) || 0) >= perSymMax) _f("perSymMax", `【同股已滿】此股已持 ${openBySym.get(r.sym)} 筆，上限 ${perSymMax} ${_whereHint("perSymMax", `${perSymMax}`, `${perSymMax+1}`)}`);
+        // 為清晰：把三個機率轉成百分比給人看
+        const _p030 = (r.wr030*100|0), _p050 = (r.wr050*100|0), _p050d = (r.wr050d*100|0);
+        if (lv === 1 && !(r.wr050 >= r.wr050d)) _f("gradientLevel", `【保護L1 不符：上漲機率輸給下跌機率】「漲 0.5% 機率」${_p050}% < 「跌 0.5% 機率」${_p050d}%，這檔短線下跌機率比上漲還高，L1 保護擋下 ${_whereHint("gradientLevel", "L1", "L0（關閉保護）")}`);
+        if (lv === 2 && !(r.wr030 >= r.wr050d)) _f("gradientLevel", `【保護L2 不符：連小漲機率都輸給下跌機率】「漲 0.3% 機率」${_p030}% < 「跌 0.5% 機率」${_p050d}%，連小漲機會都不如下跌，L2 保護擋下 ${_whereHint("gradientLevel", "L2", "L1 或 L0")}`);
+        if (lv === 3 && !(r.wr030 >= r.wr050 && r.wr050 >= r.wr050d)) _f("gradientLevel", `【保護L3 階梯不符：機率排序不漂亮】L3 要求「漲 0.3% 機率 ≥ 漲 0.5% 機率 ≥ 跌 0.5% 機率」（越小漲越容易發生），目前 ${_p030}/${_p050}/${_p050d}% 不符這個排序 ${_whereHint("gradientLevel", "L3", "L2 / L1 / L0")}`);
+        if ((openBySym.get(r.sym) || 0) >= perSymMax) _f("perSymMax", `【同股已滿】此股已持 ${openBySym.get(r.sym)} 筆，每股最多 ${perSymMax} 筆同時持有，不再加碼 ${_whereHint("perSymMax", `${perSymMax}`, `${perSymMax+1}`)}`);
         const brk = r.brk;
         if (simCfg.requireHistTurnUp && !(brk && (brk.histTurnUp || brk.retest))) {
-          _f("requireHistTurnUp", `【MACD-H 未翻紅】此檔不是「動能初始點」也非 retest ${_whereHint("requireHistTurnUp")}`);
+          _f("requireHistTurnUp", `【動能不夠新鮮 (MACD-H 未翻紅)】這檔不是「MACD 柱由負轉正第一根」(動能初始點)，也不是 retest（回測前高不破繼續走）；買在沒新動能的位子容易追高套牢 ${_whereHint("requireHistTurnUp")}`);
         }
         if ((+simCfg.minVolBurstAuto || 0) > 0 && !(brk && brk.volRatio >= simCfg.minVolBurstAuto)) {
           const cur = brk?.volRatio?.toFixed(1) ?? "?";
           const tgt = Math.max(0, +cur || 0).toFixed(1);
-          _f("minVolBurstAuto", `【量比不足】此檔 ×${cur}，門檻 ×${simCfg.minVolBurstAuto} ${_whereHint("minVolBurstAuto", `×${simCfg.minVolBurstAuto}`, `×${tgt}`)}`);
+          _f("minVolBurstAuto", `【量能不足（量比 ×${cur}）】當下成交量只有近 20 根均量的 ${cur} 倍，門檻要 ≥ ${simCfg.minVolBurstAuto} 倍；沒爆量的突破多為假突破 ${_whereHint("minVolBurstAuto", `×${simCfg.minVolBurstAuto}`, `×${tgt}`)}`);
         }
         if ((+simCfg.rsiMaxAuto || 0) > 0 && typeof r.rsi5 === "number" && r.rsi5 > simCfg.rsiMaxAuto) {
-          _f("rsiMaxAuto", `【RSI 過熱】此檔 ${r.rsi5.toFixed(0)}，上限 ${simCfg.rsiMaxAuto} ${_whereHint("rsiMaxAuto", `${simCfg.rsiMaxAuto}`, `${Math.ceil(r.rsi5)}`)}`);
+          _f("rsiMaxAuto", `【RSI 過熱】5 分 K 的 RSI(14) = ${r.rsi5.toFixed(0)}，超過上限 ${simCfg.rsiMaxAuto}；通常表示短線已超買、追進去容易接到回檔 ${_whereHint("rsiMaxAuto", `${simCfg.rsiMaxAuto}`, `${Math.ceil(r.rsi5)}`)}`);
         }
         const pmMode = simCfg.preMarketBuyMode || 'normal';
         if (pmMode !== 'normal' && typeof _usSessionOfTs === 'function') {
           const sess = _usSessionOfTs(Date.now());
           if (sess !== 'rth') {
-            if (pmMode === 'disabled') _f("preMarketBuyMode", `【盤前/後禁買】目前時段 ${sess}，模式=disabled ${_whereHint("preMarketBuyMode", "disabled", "normal 或 breakoutOnly")}`);
-            else if (pmMode === 'breakoutOnly' && !(brk && (brk.breakout || brk.retest))) _f("preMarketBuyMode", `【盤前/後非突破】時段 ${sess}，模式=breakoutOnly 但此檔未突破/回測 ${_whereHint("preMarketBuyMode", "breakoutOnly", "normal")}`);
+            if (pmMode === 'disabled')
+              _f("preMarketBuyMode", `【盤前/後禁買】現在是非盤中時段 (${sess})，盤前/盤後模式設為 disabled（完全不下單）；盤外流動性差、滑價大故鎖住 ${_whereHint("preMarketBuyMode", "disabled", "normal 或 breakoutOnly")}`);
+            else if (pmMode === 'breakoutOnly' && !(brk && (brk.breakout || brk.retest)))
+              _f("preMarketBuyMode", `【盤前/後僅買突破，本檔未突破】現在 ${sess} 時段、模式設為 breakoutOnly（只買 breakout / retest 的個股），但本檔目前既未突破前高也非回測 ${_whereHint("preMarketBuyMode", "breakoutOnly", "normal")}`);
           }
         }
         if (simCfg.requireBreakout && !(brk && (brk.breakout || brk.retest))) {
-          _f("requireBreakout", `【未突破/回測】此檔不是 breakout 也不是 retest ${_whereHint("requireBreakout")}`);
+          _f("requireBreakout", `【不是突破 / 回測候選】只買突破 (breakout) 或回測 (retest) 模式啟用中，本檔目前還沒有有效突破前高，也不是 retest（回測不破繼續走） ${_whereHint("requireBreakout")}`);
         }
         const guard = (typeof THR !== "undefined" && +THR.chasedGuardMul) || +simCfg.chasedGuardAtrMul || 0;
         if (guard > 0 && brk && brk.atrPct != null && brk.distToHigh20Pct != null && brk.distToHigh20Pct > brk.atrPct * guard) {
           const need = (brk.distToHigh20Pct / brk.atrPct).toFixed(2);
-          _f("chasedGuardAtrMul", `【追高警示】距20H ${brk.distToHigh20Pct.toFixed(2)}% > ATR ${brk.atrPct.toFixed(2)}% × ${guard} ${_whereHint("chasedGuardAtrMul", `×${guard}`, `×${need}`)}`);
+          _f("chasedGuardAtrMul", `【追高警示：距前高太遠】目前價距近 20 根高點 ${brk.distToHigh20Pct.toFixed(2)}%，已超過 ATR ${brk.atrPct.toFixed(2)}% × ${guard}（ATR = 平均單根波動幅度）；偏離壓縮區頂部太多，買進等於追在山頂 ${_whereHint("chasedGuardAtrMul", `×${guard}`, `×${need}`)}`);
         }
         return fails;
       };
