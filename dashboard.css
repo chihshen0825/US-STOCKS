@@ -3077,6 +3077,129 @@ sup.stale-warn {
   animation: hkFlash 1.1s ease-out;
   border-radius: 6px;
 }
+
+/* v.56 模擬下單前置檢查浮層 ============================== */
+.precheck-mask {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(8, 10, 14, 0.62);
+  backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center;
+  animation: precheckFadeIn .14s ease-out;
+}
+@keyframes precheckFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.precheck-card {
+  width: min(560px, 92vw);
+  max-height: 86vh;
+  background: linear-gradient(180deg, #1c2026 0%, #161a20 100%);
+  color: #e6eaf0;
+  border: 1px solid #2f3a48;
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(79,195,247,0.08) inset;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  animation: precheckPop .18s cubic-bezier(.2,.9,.3,1.2);
+}
+@keyframes precheckPop { from { transform: translateY(8px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.precheck-head {
+  display: grid; grid-template-columns: 1fr auto; align-items: center;
+  gap: 10px; padding: 14px 16px 12px;
+  border-bottom: 1px solid #252b34;
+  background: linear-gradient(180deg, rgba(79,195,247,0.06), transparent);
+}
+.precheck-title { grid-column: 1; font-size: 13px; font-weight: 700; color: #9ec5e8; letter-spacing: .03em; }
+.precheck-sub   { grid-column: 1; font-size: 15px; margin-top: 2px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.precheck-sub .sym { font-weight: 800; color: #fff; font-family: ui-monospace, Consolas, monospace; }
+.precheck-sub .px  { color: #cfd6e0; font-variant-numeric: tabular-nums; }
+.precheck-sub .arrow { color: #6c7686; }
+.precheck-sub .tgt { font-weight: 800; font-variant-numeric: tabular-nums; padding: 1px 8px; border-radius: 6px; }
+.precheck-sub .tgt.up   { color: #ffcdd2; background: rgba(239,83,80,0.16); border: 1px solid rgba(239,83,80,0.45); }
+.precheck-sub .tgt.down { color: #c8e6c9; background: rgba(102,187,106,0.16); border: 1px solid rgba(102,187,106,0.45); }
+.precheck-x {
+  grid-column: 2; grid-row: 1 / span 2;
+  align-self: start; background: transparent; color: #9aa3ad;
+  border: 1px solid #2f3a48; border-radius: 6px; cursor: pointer;
+  width: 28px; height: 28px; line-height: 1; font-size: 14px;
+}
+.precheck-x:hover { background: #232932; color: #fff; }
+
+.precheck-body { padding: 12px 16px; overflow: auto; }
+
+.precheck-fix {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: rgba(255, 196, 71, 0.10);
+  border: 1px solid rgba(255, 196, 71, 0.45);
+  color: #ffe7a8;
+  padding: 10px 12px; border-radius: 8px;
+  margin-bottom: 12px; font-size: 13px; line-height: 1.5;
+}
+.precheck-fix .ic { font-size: 16px; }
+.precheck-fix b { color: #ffd54f; }
+
+.precheck-sec { margin: 0 0 14px; }
+.precheck-sec:last-child { margin-bottom: 0; }
+.precheck-sec h4 {
+  margin: 0 0 8px; padding-bottom: 6px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 13px; font-weight: 700; color: #cfd6e0;
+  border-bottom: 1px dashed #2a313c;
+}
+.precheck-sec h4 .sec-title { color: #fff; font-weight: 800; }
+.precheck-sec .cnt {
+  font-size: 11px; padding: 2px 8px; border-radius: 10px;
+  font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.cnt-pass { color: #c8e6c9; background: rgba(102,187,106,0.16); border: 1px solid rgba(102,187,106,0.45); }
+.cnt-fail { color: #ffcdd2; background: rgba(239,83,80,0.16);  border: 1px solid rgba(239,83,80,0.45); }
+.cnt-fail.zero { opacity: 0.5; }
+.cnt-warn { color: #ffe082; background: rgba(255,196,71,0.16); border: 1px solid rgba(255,196,71,0.45); }
+.verdict {
+  margin-left: auto;
+  font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 10px;
+}
+.verdict.ok  { color: #1a1a1a; background: linear-gradient(135deg, #b9f6ca, #69f0ae); }
+.verdict.bad { color: #fff;    background: linear-gradient(135deg, #ef9a9a, #e53935); }
+
+.precheck-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.precheck-list li {
+  display: grid; grid-template-columns: 18px minmax(140px, max-content) 1fr; gap: 10px;
+  align-items: center;
+  padding: 5px 8px; border-radius: 6px;
+  font-size: 13px; line-height: 1.4;
+}
+.precheck-list li.ok  { background: rgba(102,187,106,0.06); }
+.precheck-list li.bad { background: rgba(239,83,80,0.10); border: 1px solid rgba(239,83,80,0.25); }
+.precheck-list li .mark { font-weight: 900; text-align: center; }
+.precheck-list li.ok  .mark { color: #69f0ae; }
+.precheck-list li.bad .mark { color: #ff8a80; }
+.precheck-list li .name { color: #dfe6ee; font-weight: 600; }
+.precheck-list li.bad .name { color: #ffd1cd; }
+.precheck-list li .detail { color: #9aa3ad; font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.precheck-list li.bad .detail { color: #ffb3a8; }
+
+.precheck-note { font-size: 12px; color: #9aa3ad; padding: 4px 2px; }
+
+.precheck-foot {
+  padding: 12px 16px;
+  border-top: 1px solid #252b34;
+  background: rgba(255,255,255,0.02);
+  display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;
+}
+.precheck-msg { font-size: 12.5px; color: #c9d3df; line-height: 1.5; }
+.precheck-btns { display: inline-flex; gap: 8px; }
+.precheck-btns button {
+  font-size: 13px; padding: 7px 14px; border-radius: 6px;
+  cursor: pointer; font-weight: 700; min-width: 84px;
+  border: 1px solid #2f3a48; background: #232932; color: #dfe6ee;
+}
+.precheck-btns button:hover { background: #2a313c; }
+.precheck-btns .btn-ok.primary { background: linear-gradient(135deg, #4fc3f7, #2196f3); color: #0b1115; border-color: #2196f3; }
+.precheck-btns .btn-ok.primary:hover { background: linear-gradient(135deg, #80d8ff, #42a5f5); }
+.precheck-btns .btn-ok.warn    { background: linear-gradient(135deg, #ffb74d, #fb8c00); color: #1a1a1a; border-color: #fb8c00; }
+.precheck-btns .btn-ok.warn:hover { background: linear-gradient(135deg, #ffd180, #ffa726); }
+.precheck-btns button:focus-visible { outline: 2px solid #4fc3f7; outline-offset: 2px; }
+/* ============================================================ */
+
 .hk-help-pop {
   position: fixed; right: 16px; bottom: 16px; z-index: 9999;
   background: #1a1d22; color: #dfe3ea;

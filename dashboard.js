@@ -7297,6 +7297,7 @@ function _simPrecheck(sym, originalTarget, marketPrice) {
 
 function _simPrecheckMessage(sym, marketPrice, report) {
   // v.50 重新編排：分區、單一字元符號 (✓/✗)、欄位對齊，避免螢幕字滿一片難讀
+  // (仅侜 fallback / debug 使用；v.56 起改用 _showPrecheckModal HTML 浮層)
   const W = 22; // 規則名稱欄寬（中文約 2 半形）
   const padR = (s) => {
     s = String(s == null ? "" : s);
@@ -7341,6 +7342,133 @@ function _simPrecheckMessage(sym, marketPrice, report) {
     lines.push(`→ 基本規則有 ${basicFail.length} 項不符，addSimTrade 仍會 reject；要強行試單嗎？`);
   }
   return lines.join("\n");
+}
+
+// v.56 模擬下單前置檢查 HTML 浮層；回傳 Promise<boolean>（OK→true / Cancel/Esc/外點→false）
+function _showPrecheckModal(sym, marketPrice, report) {
+  return new Promise((resolve) => {
+    // 若已有同類浮層，先移除避免重疊
+    document.querySelectorAll(".precheck-mask").forEach(n => n.remove());
+
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, ch => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[ch]));
+    const fmtItem = (c) => `<li class="${c.pass ? "ok" : "bad"}">` +
+      `<span class="mark" aria-hidden="true">${c.pass ? "✓" : "✗"}</span>` +
+      `<span class="name">${esc(c.name)}</span>` +
+      `<span class="detail">${esc(c.detail || "")}</span>` +
+      `</li>`;
+
+    const tgtPct = (report.effectiveTarget * 100).toFixed(2);
+    const tgtSign = report.effectiveTarget > 0 ? "+" : "";
+    const tgtCls = report.effectiveTarget >= 0 ? "up" : "down";
+    const basicPass = report.checks.filter(c => c.pass).length;
+    const basicFail = report.checks.length - basicPass;
+    const basicAll = report.allPass;
+    const hasRow = !!report.hasRow;
+    const autoChecks = report.autoChecks || [];
+    const autoPass = autoChecks.filter(c => c.pass).length;
+    const autoFail = autoChecks.length - autoPass;
+    const autoAll = report.autoAllPass;
+
+    let fixHtml = "";
+    if (report.fixNote) {
+      fixHtml = `<div class="precheck-fix"><span class="ic">🔧</span>` +
+        `<div><b>目標自動修正</b><br>${esc(report.fixNote)}</div></div>`;
+    }
+
+    const basicHtml = `<section class="precheck-sec">
+        <h4>
+          <span class="sec-title">基本規則</span>
+          <span class="cnt cnt-pass">通過 ${basicPass}</span>
+          <span class="cnt cnt-fail ${basicFail ? "" : "zero"}">不符 ${basicFail}</span>
+        </h4>
+        <ul class="precheck-list">${report.checks.map(fmtItem).join("")}</ul>
+      </section>`;
+
+    let autoHtml;
+    if (!hasRow) {
+      autoHtml = `<section class="precheck-sec">
+        <h4><span class="sec-title">自動下單規則</span><span class="cnt cnt-warn">無備選清單資料</span></h4>
+        <div class="precheck-note">此股票尚未在備選清單中，無法比對 auto 規則。手動試單仍可繼續。</div>
+      </section>`;
+    } else if (!autoChecks.length) {
+      autoHtml = `<section class="precheck-sec">
+        <h4><span class="sec-title">自動下單規則</span><span class="cnt cnt-warn">無規則可檢查</span></h4>
+      </section>`;
+    } else {
+      const verdict = autoAll
+        ? `<span class="verdict ok">auto 會買</span>`
+        : `<span class="verdict bad">auto 不會買</span>`;
+      autoHtml = `<section class="precheck-sec">
+        <h4>
+          <span class="sec-title">自動下單規則</span>
+          <span class="cnt cnt-pass">通過 ${autoPass}</span>
+          <span class="cnt cnt-fail ${autoFail ? "" : "zero"}">不符 ${autoFail}</span>
+          ${verdict}
+        </h4>
+        <ul class="precheck-list">${autoChecks.map(fmtItem).join("")}</ul>
+      </section>`;
+    }
+
+    let finalMsg;
+    if (basicAll && autoAll && hasRow) finalMsg = `所有規則通過，確定送出 ${tgtSign}${tgtPct}% 模擬單？`;
+    else if (basicAll) finalMsg = `基本規則通過${hasRow && autoChecks.length ? "，但 auto 規則未全過" : ""}；確定送出 ${tgtSign}${tgtPct}% 模擬單？`;
+    else finalMsg = `基本規則有 ${basicFail} 項不符，addSimTrade 仍會 reject；要強行試單嗎？`;
+    const ctaCls = basicAll ? "primary ok" : "warn";
+    const ctaTxt = basicAll ? "送出 模擬單" : "仍要試單";
+
+    const mask = document.createElement("div");
+    mask.className = "precheck-mask";
+    mask.setAttribute("role", "dialog");
+    mask.setAttribute("aria-modal", "true");
+    mask.setAttribute("aria-label", "模擬下單前置檢查");
+    mask.innerHTML = `
+      <div class="precheck-card" role="document">
+        <div class="precheck-head">
+          <div class="precheck-title">模擬下單前置檢查</div>
+          <div class="precheck-sub">
+            <b class="sym">${esc(sym)}</b>
+            <span class="px">@ $${(+marketPrice || 0).toFixed(2)}</span>
+            <span class="arrow">→</span>
+            <span class="tgt ${tgtCls}">${tgtSign}${tgtPct}%</span>
+          </div>
+          <button type="button" class="precheck-x" aria-label="關閉">✕</button>
+        </div>
+        <div class="precheck-body">
+          ${fixHtml}
+          ${basicHtml}
+          ${autoHtml}
+        </div>
+        <div class="precheck-foot">
+          <div class="precheck-msg">${esc(finalMsg)}</div>
+          <div class="precheck-btns">
+            <button type="button" class="btn-cancel">取消</button>
+            <button type="button" class="btn-ok ${ctaCls}">${esc(ctaTxt)}</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+
+    let settled = false;
+    const finish = (val) => {
+      if (settled) return; settled = true;
+      try { document.removeEventListener("keydown", onKey, true); } catch {}
+      try { mask.remove(); } catch {}
+      resolve(val);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); finish(false); }
+      else if (e.key === "Enter") { e.preventDefault(); finish(true); }
+    };
+    document.addEventListener("keydown", onKey, true);
+    mask.addEventListener("click", (e) => { if (e.target === mask) finish(false); });
+    mask.querySelector(".precheck-x")?.addEventListener("click", () => finish(false));
+    mask.querySelector(".btn-cancel")?.addEventListener("click", () => finish(false));
+    mask.querySelector(".btn-ok")?.addEventListener("click", () => finish(true));
+    // 自動聚焦 OK 按鈕（Enter 直接送出）
+    setTimeout(() => { try { mask.querySelector(".btn-ok")?.focus(); } catch {} }, 0);
+  });
 }
 
 function addSimTrade(sym, targetPct, marketPrice, opts) {
@@ -10064,7 +10192,7 @@ function bindWrMiniClicks(card, sym) {
       }
       el.title = baseTitleStem.replace("到期自動結算", `${_fmtWin()} 後自動結算`) + extra;
     });
-    el.addEventListener("click", () => {
+    el.addEventListener("click", async () => {
       const priceEl = card.querySelector(".price");
       const price = parseFloat((priceEl?.textContent || "").replace(/[^0-9.\-]/g, ""));
       if (!isFinite(price) || price <= 0) { alert("尚未取得即時價，請稍候再試"); return; }
@@ -10076,7 +10204,9 @@ function bindWrMiniClicks(card, sym) {
       // v.48 前置檢查：列出符合/不符合的規則 + 目標是否 FIX
       // (原本「膠囊內建目標 < simCfg.targetPct → 拉高」邏輯已移到 _simPrecheck 內)
       const report = _simPrecheck(sym, target, price);
-      if (!confirm(_simPrecheckMessage(sym, price, report))) return;
+      // v.56 HTML 浮層對話框（改換 native confirm() 難讀的牋版）
+      const ok = await _showPrecheckModal(sym, price, report);
+      if (!ok) return;
       target = report.effectiveTarget;
       const snap = (typeof wlData !== "undefined" && wlData) ? wlData.get(sym) : null;
       // 強制本機模擬、不走 WS
