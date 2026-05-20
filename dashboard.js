@@ -2040,7 +2040,7 @@ function bindPanelTabHotkeys() {
         _lastGAt = 0;
         const el = document.getElementById("panelTabs");
         if (el) _scrollAndFlash(el);
-      }, 280);
+      }, 140);
       return;
     }
     // 以下快捷鍵：必須「無任何 modifier」才生效
