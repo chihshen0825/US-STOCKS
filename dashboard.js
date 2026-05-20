@@ -1935,8 +1935,8 @@ function buildPanelTabs() {
         `<button class="panel-extra-btn" data-act="redo"  title="重做下一步（僅 [${p.name}]）" disabled>↷</button>` +
         `<button class="panel-extra-btn" data-act="clear" title="清空還原 / 重做歷史紀錄（僅 [${p.name}]）" disabled>🗑</button>`
       : "";
-    const tipActive = `✓ 目前分頁：${p.name}${hk ? `\n快捷鍵：${hk}（Ctrl+\` 循環切換）` : ""}`;
-    const tipIdle   = `點此切換到「${p.name}」${hk ? `\n快捷鍵：${hk}（Ctrl+\` 循環切換）` : ""}`;
+    const tipActive = `✓ 目前分頁：${p.name}${hk ? `\n快捷鍵：${hk}（G,G 循環切換）` : ""}`;
+    const tipIdle   = `點此切換到「${p.name}」${hk ? `\n快捷鍵：${hk}（G,G 循環切換）` : ""}`;
     const tipText = p.id === activePanelId ? tipActive : tipIdle;
     const tipAttr = tipText.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     return `<span class="panel-tab-group" data-pid="${p.id}">` +
@@ -1987,6 +1987,9 @@ function buildPanelTabs() {
 
 /** 全域快捷鍵：分頁切換 / 跳卡片 / 跳區塊 / 顯示說明。只綁定一次。 */
 let _panelTabHotkeysBound = false;
+// v.52 G,G 雙連按進行分頁循環切換的計時器與最後一次 g 按下時間
+let _lastGAt = 0;
+let _gSingleTimer = null;
 function bindPanelTabHotkeys() {
   if (_panelTabHotkeysBound) return;
   _panelTabHotkeysBound = true;
@@ -2007,18 +2010,35 @@ function bindPanelTabHotkeys() {
       }
       return;
     }
-    // Ctrl+`：循環切換到下一個分頁（Ctrl+Shift+` 反向）
-    if (e.ctrlKey && !e.altKey && !e.metaKey && (e.key === "`" || e.key === "~")) {
+    // v.52 G,G：短時間內按兩次 g 循環切換到下一個分頁（第二下加 Shift = 反向）
+    // 單獨按一次 g 仍會跳到分頁列（原本 jumpMap.g 行為）——但延遲 280ms，等看是否有第二下
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "g" || e.key === "G")) {
       e.preventDefault();
-      const n = PANEL_DEFS.length;
-      if (n < 2) return;
-      let cur = PANEL_DEFS.findIndex(p => p.id === activePanelId);
-      if (cur < 0) cur = 0;
-      const next = e.shiftKey ? (cur - 1 + n) % n : (cur + 1) % n;
-      const def = PANEL_DEFS[next];
-      if (def && def.id !== activePanelId) switchPanel(def.id);
-      const tabsEl = document.getElementById("panelTabs");
-      if (tabsEl) _scrollAndFlash(tabsEl);
+      const now = Date.now();
+      if (_lastGAt && now - _lastGAt < 600) {
+        // 第二下：取消單 g 待執行的 scroll，改為循環分頁
+        if (_gSingleTimer) { clearTimeout(_gSingleTimer); _gSingleTimer = null; }
+        _lastGAt = 0;
+        const n = PANEL_DEFS.length;
+        if (n >= 2) {
+          let cur = PANEL_DEFS.findIndex(p => p.id === activePanelId);
+          if (cur < 0) cur = 0;
+          const next = e.shiftKey ? (cur - 1 + n) % n : (cur + 1) % n;
+          const def = PANEL_DEFS[next];
+          if (def && def.id !== activePanelId) switchPanel(def.id);
+          const tabsEl = document.getElementById("panelTabs");
+          if (tabsEl) _scrollAndFlash(tabsEl);
+        }
+        return;
+      }
+      _lastGAt = now;
+      if (_gSingleTimer) clearTimeout(_gSingleTimer);
+      _gSingleTimer = setTimeout(() => {
+        _gSingleTimer = null;
+        _lastGAt = 0;
+        const el = document.getElementById("panelTabs");
+        if (el) _scrollAndFlash(el);
+      }, 280);
       return;
     }
     // 以下快捷鍵：必須「無任何 modifier」才生效
@@ -2040,7 +2060,7 @@ function bindPanelTabHotkeys() {
       try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch { window.scrollTo(0, 0); }
       return;
     }
-    const jumpMap = { g: "panelTabs", w: "watchlist", s: "simPanel", c: "catalogEditor" };
+    const jumpMap = { w: "watchlist", s: "simPanel", c: "catalogEditor" };
     if (jumpMap[k]) {
       const el = document.getElementById(jumpMap[k]);
       if (el) {
@@ -2082,11 +2102,11 @@ function _showHotkeyHelp() {
     <div class="hk-help-body">
       <div class="hk-help-sec">分頁切換</div>
       <div class="hk-row"><kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>9</kbd><span>直接切到第 N 個分頁</span></div>
-      <div class="hk-row"><kbd>Ctrl</kbd>+<kbd>\`</kbd><span>循環下一個分頁（加 Shift 反向）</span></div>
+      <div class="hk-row"><kbd>G</kbd>,<kbd>G</kbd><span>短時間內按兩次 g 循環下一個分頁（第二下加 Shift 反向）</span></div>
       <div class="hk-help-sec">跳到卡片 / 區塊</div>
       <div class="hk-row"><kbd>1</kbd>…<kbd>9</kbd><span>跳到目前儀表板第 N 張卡片</span></div>
       <div class="hk-row"><kbd>T</kbd><span>跳到頁面最上方</span></div>
-      <div class="hk-row"><kbd>G</kbd><span>跳到上方儀表板 (Grid)</span></div>
+      <div class="hk-row"><kbd>G</kbd><span>跳到分頁列 (單按；連按兩下則為循環分頁)</span></div>
       <div class="hk-row"><kbd>W</kbd><span>跳到備選清單訊號 (Watchlist)</span></div>
       <div class="hk-row"><kbd>S</kbd><span>跳到模擬交易紀錄 (Sim)</span></div>
       <div class="hk-row"><kbd>C</kbd><span>跳到備選清單編輯 (Catalog)</span></div>
