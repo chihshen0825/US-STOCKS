@@ -3416,7 +3416,7 @@ sup.stale-warn {
 /* v.63: 立即調整浮窗 — 浮在 modal 之上即時改 simCfg */
 .rfm-inline-pop {
   position: fixed;
-  width: 320px;
+  width: 360px;
   background: #1c2026;
   color: #dfe6ee;
   border: 1px solid #3a4150;
@@ -3425,6 +3425,29 @@ sup.stale-warn {
   z-index: 10030; /* 高於 .confirm-mask (10020) */
   font-size: 12.5px;
   overflow: hidden;
+}
+/* v.65: 鏡像齒輪面板控制項時，讓 host wrapper 自然 fit popup 寬度 */
+.rfm-inline-pop .rfm-mirror-host { background: transparent; padding: 0; margin: 0; }
+.rfm-inline-pop .threshold-panel,
+.rfm-inline-pop .threshold-sub,
+.rfm-inline-pop .threshold-grid {
+  position: static; display: block; padding: 0; margin: 0; background: transparent;
+  border: 0; box-shadow: none; max-height: none; overflow: visible; width: auto;
+}
+.rfm-inline-pop .sim-rule,
+.rfm-inline-pop .sim-rule-groups,
+.rfm-inline-pop .sim-group,
+.rfm-inline-pop .sim-ctrl-group {
+  padding: 0; margin: 0; background: transparent; border: 0; box-shadow: none;
+  display: block; gap: 0;
+}
+.rfm-inline-pop .ria-body-mirror {
+  padding: 12px;
+  /* 讓 clone 的 row 顯示完整、不擠壓 */
+}
+.rfm-inline-pop .rfm-mirror-row {
+  width: 100% !important;
+  margin: 0 !important;
 }
 .rfm-inline-pop .ria-head {
   display: flex; align-items: center; justify-content: space-between;

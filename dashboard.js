@@ -7736,172 +7736,157 @@ function _jumpToSetting(key) {
 }
 
 // v.63: 在 reject-fails modal 旁邊的小浮窗即時調整某個 simCfg 設定，不離開本視窗
+// v.65: 一致性 — 改為「鏡像」齒輪面板裡的原始控制項（直接 clone 其 HTML 結構），
+//       事件代理回原始 input/select/checkbox 上，重用 bindThresholdPanel / bindSimControls 的既有邏輯
+//       並繼承相同的 CSS、tooltip、label 文字，與齒輪內視覺完全一致。
 function _inlineAdjustSetting(key, anchorEl) {
   if (!key) return;
-  // 關閉前一個 inline popup（如果有）
   document.querySelectorAll(".rfm-inline-pop").forEach(n => n.remove());
-  // 控制項 metadata：type / 範圍 / 顯示格式 / 是否需以 fraction(%) 儲存
-  const META = {
-    wrMin:             { type: "range", min: 30, max: 95, step: 1, asPct: true,  label: "wrMin（wr030 勝率門檻）",   unit: "%" },
-    wrMin050:          { type: "range", min: 5,  max: 100, step: 1, asPct: true, label: "wrMin050（wr050 勝率門檻）", unit: "%" },
-    wrMax050d:         { type: "range", min: 0,  max: 60, step: 1, asPct: true,  label: "wrMax050d（wr050d 賠率上限；0 = 關閉）", unit: "%" },
-    minPriceUsd:       { type: "range", min: 0,  max: 50, step: 1, asPct: false, label: "minPriceUsd（最小股價 USD；0 = 不過濾）", unit: "$" },
-    perSymMax:         { type: "range", min: 1,  max: 10, step: 1, asPct: false, label: "perSymMax（同股最大同時持單）", unit: "" },
-    minVolBurstAuto:   { type: "range", min: 0,  max: 6, step: 0.1, asPct: false, label: "minVolBurstAuto（量比門檻 ×N；0 = 關閉）", unit: "×" },
-    rsiMaxAuto:        { type: "range", min: 0,  max: 95, step: 1, asPct: false, label: "rsiMaxAuto（RSI 過熱上限；0 = 關閉）", unit: "" },
-    chasedGuardAtrMul: { type: "range", min: 0,  max: 2, step: 0.1, asPct: false, label: "chasedGuardAtrMul（追高警示 ATR 倍數；0 = 關閉）", unit: "×" },
-    gradientLevel:     { type: "select", label: "gradientLevel（勝率階梯保護等級）",
-                          options: [
-                            { v: 0, t: "0 — 不保護" },
-                            { v: 1, t: "1 — wr050 ≥ wr050d" },
-                            { v: 2, t: "2 — wr030 ≥ wr050d" },
-                            { v: 3, t: "3 — wr030 ≥ wr050 ≥ wr050d（最嚴）" },
-                          ] },
-    preMarketBuyMode:  { type: "select", label: "preMarketBuyMode（盤前/盤後買入策略）",
-                          options: [
-                            { v: "normal",       t: "normal — 不過濾" },
-                            { v: "breakoutOnly", t: "breakoutOnly — 只接受 breakout/retest" },
-                            { v: "disabled",     t: "disabled — 盤前/後完全不下單" },
-                          ] },
-    requireHistTurnUp: { type: "checkbox", label: "requireHistTurnUp（只買 MACD-H 剛翻紅 / retest）" },
-    requireBreakout:   { type: "checkbox", label: "requireBreakout（只買 breakout / retest 候選）" },
+
+  // key → 原始控制項 selector + 所在面板樣式（決定 popup 內要 wrap 哪個父層 CSS）
+  const MAP = {
+    wrMin:             { sel: '[data-sim="wrMin"]',             panel: "thr" },
+    requireBreakout:   { sel: '[data-sim="requireBreakout"]',   panel: "thr" },
+    requireHistTurnUp: { sel: '[data-sim="requireHistTurnUp"]', panel: "thr" },
+    minVolBurstAuto:   { sel: '[data-sim="minVolBurstAuto"]',   panel: "thr" },
+    rsiMaxAuto:        { sel: '[data-sim="rsiMaxAuto"]',        panel: "thr" },
+    preMarketBuyMode:  { sel: '[data-sim="preMarketBuyMode"]',  panel: "thr" },
+    chasedGuardAtrMul: { sel: '[data-thr="chasedGuardMul"]',    panel: "thr" },
+    wrMin050:          { sel: '#simCfgWrMin050',                panel: "sim" },
+    wrMax050d:         { sel: '#simCfgWrMax050d',               panel: "sim" },
+    gradientLevel:     { sel: '#simCfgGradLv',                  panel: "sim" },
+    minPriceUsd:       { sel: '#simCfgMinPrice',                panel: "sim" },
+    perSymMax:         { sel: '#simCfgPerSym',                  panel: "sim" },
   };
-  const meta = META[key];
-  if (!meta || typeof simCfg !== "object") return;
+  const m = MAP[key];
+  if (!m) return;
+  const srcEl = document.querySelector(m.sel);
+  if (!srcEl) return;
+  // 找出原始控制項的容器 — 通常是包住 label + input + value 的 <label>
+  const srcCont = srcEl.closest("label.threshold-row, label.sim-ctrl, label") || srcEl.parentElement;
+  if (!srcCont) return;
 
-  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, ch => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[ch]));
+  // 取原始控制項的「顯示名稱」當 popup title（剝掉 ⓘ 等修飾）
+  const titleTxt = (srcCont.querySelector("span")?.textContent || key)
+    .replace(/ⓘ/g, "").replace(/\s+/g, " ").trim();
 
-  // 取出目前值（asPct 表示 simCfg 是 0~1 fraction，UI 顯示 0~100）
-  const rawCur = simCfg[key];
-  const uiCur = meta.asPct ? Math.round((+rawCur || 0) * 100) : rawCur;
+  // 對應的 value-output 元素（門檻浮窗用 [data-sim-out=key] / [data-thr-out=...]）
+  const outSel = key === "chasedGuardAtrMul"
+    ? '[data-thr-out="chasedGuardMul"]'
+    : (m.panel === "thr" ? `[data-sim-out="${key}"]` : null);
 
-  // 建 popup
+  // 建立 popup
   const pop = document.createElement("div");
-  pop.className = "rfm-inline-pop";
-  let bodyHtml = "";
-  if (meta.type === "range") {
-    bodyHtml = `
-      <input type="range" class="ria-range" min="${meta.min}" max="${meta.max}" step="${meta.step}" value="${esc(uiCur)}">
-      <div class="ria-valrow">
-        <span class="ria-cur">${meta.unit === "$" ? "$" : ""}<b class="ria-val">${esc(uiCur)}</b>${meta.unit && meta.unit !== "$" ? esc(meta.unit) : ""}</span>
-        <input type="number" class="ria-num" min="${meta.min}" max="${meta.max}" step="${meta.step}" value="${esc(uiCur)}">
-      </div>`;
-  } else if (meta.type === "select") {
-    const opts = meta.options.map(o => `<option value="${esc(o.v)}" ${String(o.v) === String(rawCur) ? "selected" : ""}>${esc(o.t)}</option>`).join("");
-    bodyHtml = `<select class="ria-select">${opts}</select>`;
-  } else if (meta.type === "checkbox") {
-    bodyHtml = `
-      <label class="ria-check">
-        <input type="checkbox" class="ria-cb" ${rawCur ? "checked" : ""}>
-        <span>啟用</span>
-      </label>`;
-  }
+  pop.className = "rfm-inline-pop rfm-inline-pop-mirror";
+  // 內層 wrap：依 panel 類型套用對應父層 class，讓子層 CSS 完整生效
+  const wrapOpen = (m.panel === "thr")
+    ? `<div class="threshold-panel rfm-mirror-host"><div class="threshold-sub"><div class="threshold-grid">`
+    : `<div class="sim-rule rfm-mirror-host"><div class="sim-rule-groups"><div class="sim-group"><div class="sim-ctrl-group">`;
+  const wrapClose = (m.panel === "thr")
+    ? `</div></div></div>`
+    : `</div></div></div></div>`;
   pop.innerHTML = `
     <div class="ria-head">
-      <span class="ria-title">${esc(meta.label)}</span>
+      <span class="ria-title">${titleTxt.replace(/[<>&"]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]))}</span>
       <button type="button" class="ria-x" title="關閉 (Esc)">✕</button>
     </div>
-    <div class="ria-body">${bodyHtml}</div>
+    <div class="ria-body ria-body-mirror">
+      ${wrapOpen}<!-- clone target inserted here -->${wrapClose}
+    </div>
     <div class="ria-foot">
       <span class="ria-saved" aria-live="polite"></span>
-      <button type="button" class="ria-reset" title="回到目前值">↺ 還原</button>
+      <button type="button" class="ria-reset" title="回到打開時的值">↺ 還原</button>
       <button type="button" class="ria-done primary">完成</button>
     </div>`;
+
+  // clone 控制項
+  const clone = srcCont.cloneNode(true);
+  clone.classList.add("rfm-mirror-row");
+  // 移除 id 避免重複（保留原始 id 在原處工作）
+  clone.querySelectorAll("[id]").forEach(el => el.removeAttribute("id"));
+  // 對 clone 內每個輸入控件，鏡像原始當前值並改為驅動原始元件
+  const srcInputs = srcCont.querySelectorAll("input, select, textarea");
+  const cloneInputs = clone.querySelectorAll("input, select, textarea");
+  const origState = []; // 紀錄原始值，供「還原」用
+  cloneInputs.forEach((cEl, i) => {
+    const sEl = srcInputs[i];
+    if (!sEl) return;
+    // 同步初值
+    if (sEl.type === "checkbox" || sEl.type === "radio") {
+      cEl.checked = sEl.checked;
+      origState.push({ kind: "check", val: sEl.checked });
+    } else {
+      cEl.value = sEl.value;
+      origState.push({ kind: "val", val: sEl.value });
+    }
+    // 鏡像 output 元素（如 data-sim-out）— 依靠原始 input 事件觸發其更新，
+    // 所以這裡直接把 clone 上的 input/change 重新派發到原始 sEl 即可。
+    const relay = (evType) => () => {
+      if (sEl.type === "checkbox" || sEl.type === "radio") {
+        sEl.checked = cEl.checked;
+      } else {
+        sEl.value = cEl.value;
+      }
+      try { sEl.dispatchEvent(new Event("input", { bubbles: true })); } catch {}
+      try { sEl.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
+      // 同步 clone 旁的 output（如果有）
+      try {
+        const cOut = clone.querySelector("output");
+        const sOut = srcCont.querySelector("output");
+        if (cOut && sOut) cOut.textContent = sOut.textContent;
+      } catch {}
+      showSaved();
+    };
+    cEl.addEventListener("input", relay("input"));
+    cEl.addEventListener("change", relay("change"));
+  });
+
+  // 把 clone 塞到 wrap 內
+  const host = pop.querySelector(".rfm-mirror-host > *:last-child" + (m.panel === "sim" ? " > .sim-ctrl-group" : ""));
+  // 對 thr：上面選擇器 = .threshold-grid；對 sim：= .sim-ctrl-group
+  const grid = (m.panel === "thr")
+    ? pop.querySelector(".threshold-grid")
+    : pop.querySelector(".sim-ctrl-group");
+  (grid || host || pop.querySelector(".ria-body-mirror")).appendChild(clone);
+
   document.body.appendChild(pop);
 
   // 定位 popup（靠近 anchorEl，避免超出視窗）
   const r = anchorEl.getBoundingClientRect();
-  const pw = 320, ph = 180;
+  const pw = pop.offsetWidth || 340;
+  const ph = pop.offsetHeight || 200;
   let left = Math.min(window.innerWidth - pw - 8, Math.max(8, r.left));
   let top = r.bottom + 6;
   if (top + ph > window.innerHeight - 8) top = Math.max(8, r.top - ph - 6);
   pop.style.left = left + "px";
   pop.style.top = top + "px";
 
+  // 「已套用」短暫提示
   const savedEl = pop.querySelector(".ria-saved");
   let savedTimer = null;
-  const showSaved = () => {
+  function showSaved() {
     if (!savedEl) return;
     savedEl.textContent = "✓ 已套用";
     savedEl.classList.add("ria-saved-on");
     if (savedTimer) clearTimeout(savedTimer);
     savedTimer = setTimeout(() => { savedEl.textContent = ""; savedEl.classList.remove("ria-saved-on"); }, 1100);
-  };
-
-  const applyValue = (uiVal) => {
-    let stored;
-    if (meta.type === "checkbox") {
-      stored = !!uiVal;
-    } else if (meta.type === "select") {
-      // 數字 select（gradientLevel）需轉 number
-      stored = (key === "gradientLevel") ? (+uiVal | 0) : String(uiVal);
-    } else {
-      const n = +uiVal;
-      if (!isFinite(n)) return;
-      stored = meta.asPct ? (Math.round(n) / 100) : n;
-    }
-    simCfg[key] = stored;
-    try { if (typeof saveSimCfg === "function") saveSimCfg(); } catch {}
-    try { if (typeof _renderSimCfgLabels === "function") _renderSimCfgLabels(); } catch {}
-    // 同步 DOM 上的對應控制項，讓門檻浮窗 / 試單面板顯示一致
-    try {
-      const selectors = [
-        `[data-sim="${key}"]`,
-        `[data-thr="${key === "chasedGuardAtrMul" ? "chasedGuardMul" : key}"]`,
-      ];
-      // sim panel 各 simCfg* ID 對應
-      const SIM_IDS = {
-        wrMin050: "simCfgWrMin050", wrMax050d: "simCfgWrMax050d",
-        gradientLevel: "simCfgGradLv", minPriceUsd: "simCfgMinPrice",
-        perSymMax: "simCfgPerSym",
-      };
-      if (SIM_IDS[key]) selectors.push("#" + SIM_IDS[key]);
-      for (const sel of selectors) {
-        document.querySelectorAll(sel).forEach(el => {
-          if (el.type === "checkbox") el.checked = !!stored;
-          else if (el.tagName === "SELECT") el.value = String(stored);
-          else el.value = meta.asPct ? String(Math.round((+stored || 0) * 100)) : String(stored);
-          try { el.dispatchEvent(new Event("input", { bubbles: true })); } catch {}
-          try { el.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
-        });
-      }
-    } catch {}
-    showSaved();
-  };
-
-  // wire controls — 即時生效
-  if (meta.type === "range") {
-    const rng = pop.querySelector(".ria-range");
-    const num = pop.querySelector(".ria-num");
-    const val = pop.querySelector(".ria-val");
-    const sync = (v) => { val.textContent = String(v); rng.value = v; num.value = v; applyValue(v); };
-    rng.addEventListener("input", () => sync(rng.value));
-    num.addEventListener("change", () => sync(num.value));
-    setTimeout(() => { try { rng.focus(); } catch {} }, 0);
-  } else if (meta.type === "select") {
-    const sel = pop.querySelector(".ria-select");
-    sel.addEventListener("change", () => applyValue(sel.value));
-    setTimeout(() => { try { sel.focus(); } catch {} }, 0);
-  } else if (meta.type === "checkbox") {
-    const cb = pop.querySelector(".ria-cb");
-    cb.addEventListener("change", () => applyValue(cb.checked));
-    setTimeout(() => { try { cb.focus(); } catch {} }, 0);
   }
 
-  // 還原按鈕 — 回到打開時的舊值
+  // 還原按鈕
   pop.querySelector(".ria-reset")?.addEventListener("click", (ev) => {
     ev.preventDefault();
-    if (meta.type === "checkbox") {
-      const cb = pop.querySelector(".ria-cb"); cb.checked = !!rawCur; applyValue(cb.checked);
-    } else if (meta.type === "select") {
-      const sel = pop.querySelector(".ria-select"); sel.value = String(rawCur); applyValue(sel.value);
-    } else {
-      const rng = pop.querySelector(".ria-range"); const num = pop.querySelector(".ria-num"); const val = pop.querySelector(".ria-val");
-      rng.value = String(uiCur); num.value = String(uiCur); val.textContent = String(uiCur); applyValue(uiCur);
-    }
+    cloneInputs.forEach((cEl, i) => {
+      const sEl = srcInputs[i];
+      const st = origState[i];
+      if (!sEl || !st) return;
+      if (st.kind === "check") cEl.checked = !!st.val; else cEl.value = st.val;
+      try { cEl.dispatchEvent(new Event("input", { bubbles: true })); } catch {}
+      try { cEl.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
+    });
   });
+
+  // 自動 focus 第一個可互動控件
+  setTimeout(() => { try { cloneInputs[0]?.focus(); } catch {} }, 0);
 
   // 關閉處理
   const close = () => {
@@ -7913,7 +7898,6 @@ function _inlineAdjustSetting(key, anchorEl) {
   const onKey = (ev) => { if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); close(); } };
   const onOutside = (ev) => { if (!pop.contains(ev.target) && ev.target !== anchorEl) close(); };
   document.addEventListener("keydown", onKey, true);
-  // 延遲掛 outside，避免本次點擊馬上關掉
   setTimeout(() => document.addEventListener("mousedown", onOutside, true), 0);
   pop.querySelector(".ria-x")?.addEventListener("click", close);
   pop.querySelector(".ria-done")?.addEventListener("click", close);
