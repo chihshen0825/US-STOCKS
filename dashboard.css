@@ -3719,3 +3719,18 @@ select.pretty-select option[value=""] {
   font-style: italic;
 }
 /* === END v.70 pretty-select === */
+
+/* v.73: 規則 summary 內可點擊跳轉到對應齒輪設定 */
+.rule-key.rule-jump {
+  cursor: pointer;
+  border-bottom: 1px dashed rgba(76, 175, 80, 0.55);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.rule-key.rule-jump:hover {
+  background: rgba(76, 175, 80, 0.18);
+  border-bottom-color: #81c784;
+  color: #c8e6c9;
+}
+.rule-key.rule-jump:active {
+  background: rgba(76, 175, 80, 0.28);
+}

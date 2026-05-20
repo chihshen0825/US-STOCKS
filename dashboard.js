@@ -7858,6 +7858,29 @@ function _jumpToSetting(key) {
     gradientLevel:     { sel: '#simCfgGradLv',                  kind: "sim" },
     minPriceUsd:       { sel: '#simCfgMinPrice',                kind: "sim" },
     perSymMax:         { sel: '#simCfgPerSym',                  kind: "sim" },
+    // v.73: 目前規則 summary 內的設定 → 直跳齒輪面板
+    scanIntervalSec:   { sel: '#simCfgScanSec',                 kind: "sim" },
+    windowMin:         { sel: '#simCfgWindow',                  kind: "sim" },
+    targetPct:         { sel: '#simCfgTarget',                  kind: "sim" },
+    concurrency:       { sel: '#simCfgConc',                    kind: "sim" },
+    amountPerTradeUsd: { sel: '#simCfgAmount',                  kind: "sim" },
+    stopLossPct:       { sel: '#simCfgStopLoss',                kind: "sim" },
+    trailingStopPct:   { sel: '#simCfgTrailStop',               kind: "sim" },
+    dailyMaxLossUsd:   { sel: '#simCfgDailyKill',               kind: "sim" },
+    entryMode:         { sel: '#simCfgEntryMode',               kind: "sim" },
+    chaseBumpSec:      { sel: '#simCfgChaseBumpSec',            kind: "sim" },
+    chaseBumpPct:      { sel: '#simCfgChaseBumpPct',            kind: "sim" },
+    chaseMaxSec:       { sel: '#simCfgChaseMaxSec',             kind: "sim" },
+    feeBuyUsd:         { sel: '#simCfgFeeBuy',                  kind: "sim" },
+    feeBuyPct:         { sel: '#simCfgFeeBuyPct',               kind: "sim" },
+    feeSellUsd:        { sel: '#simCfgFeeSellUsd',              kind: "sim" },
+    feeSellPct:        { sel: '#simCfgFeeSell',                 kind: "sim" },
+    fxUsdTwd:          { sel: '#simCfgFxUsdTwd',                kind: "sim" },
+    executionMode:     { sel: '#simCfgExecMode',                kind: "sim" },
+    sessionMode:       { sel: '#simCfgSessionMode',             kind: "sim" },
+    extendedFeePct:    { sel: '#simCfgExtFee',                  kind: "sim" },
+    wrRthOnly:         { sel: '#simCfgWrRthOnly',               kind: "sim" },
+    fillMode:          { sel: '#simCfgFillMode',                kind: "sim" },
   };
   const m = map[key];
   if (!m) return;
@@ -7932,6 +7955,29 @@ function _inlineAdjustSetting(key, anchorEl) {
     gradientLevel:     { sel: '#simCfgGradLv',                  panel: "sim" },
     minPriceUsd:       { sel: '#simCfgMinPrice',                panel: "sim" },
     perSymMax:         { sel: '#simCfgPerSym',                  panel: "sim" },
+    // v.73: 目前規則 summary 內可即時調整的設定（與 _jumpToSetting 對齊）
+    scanIntervalSec:   { sel: '#simCfgScanSec',                 panel: "sim" },
+    windowMin:         { sel: '#simCfgWindow',                  panel: "sim" },
+    targetPct:         { sel: '#simCfgTarget',                  panel: "sim" },
+    concurrency:       { sel: '#simCfgConc',                    panel: "sim" },
+    amountPerTradeUsd: { sel: '#simCfgAmount',                  panel: "sim" },
+    stopLossPct:       { sel: '#simCfgStopLoss',                panel: "sim" },
+    trailingStopPct:   { sel: '#simCfgTrailStop',               panel: "sim" },
+    dailyMaxLossUsd:   { sel: '#simCfgDailyKill',               panel: "sim" },
+    entryMode:         { sel: '#simCfgEntryMode',               panel: "sim" },
+    chaseBumpSec:      { sel: '#simCfgChaseBumpSec',            panel: "sim" },
+    chaseBumpPct:      { sel: '#simCfgChaseBumpPct',            panel: "sim" },
+    chaseMaxSec:       { sel: '#simCfgChaseMaxSec',             panel: "sim" },
+    feeBuyUsd:         { sel: '#simCfgFeeBuy',                  panel: "sim" },
+    feeBuyPct:         { sel: '#simCfgFeeBuyPct',               panel: "sim" },
+    feeSellUsd:        { sel: '#simCfgFeeSellUsd',              panel: "sim" },
+    feeSellPct:        { sel: '#simCfgFeeSell',                 panel: "sim" },
+    fxUsdTwd:          { sel: '#simCfgFxUsdTwd',                panel: "sim" },
+    executionMode:     { sel: '#simCfgExecMode',                panel: "sim" },
+    sessionMode:       { sel: '#simCfgSessionMode',             panel: "sim" },
+    extendedFeePct:    { sel: '#simCfgExtFee',                  panel: "sim" },
+    wrRthOnly:         { sel: '#simCfgWrRthOnly',               panel: "sim" },
+    fillMode:          { sel: '#simCfgFillMode',                panel: "sim" },
   };
   const m = MAP[key];
   if (!m) return;
@@ -10724,9 +10770,11 @@ function _renderSimRule() {
     2: `<b class="rule-up">漲 0.3% 機率 ≥ 跌 0.5% 機率</b>（<span style="color:#ffd180">中度</span>）`,
     3: `<b class="rule-up">漲 0.3% ≥ 漲 0.5% ≥ 跌 0.5% 機率</b>（<span style="color:#80cbc4">最保守</span>）`,
   };
+  // v.73: 帶 data-jump-key 的可點擊樣式（綠色高亮 + 放大縮小特效跳到該設定）
+  const J = (key, html) => `<b class="rule-key rule-jump" data-jump-key="${key}" title="點擊跳到「${key}」設定">${html}</b>`;
   const psmStr = psm <= 1
-    ? `每股 <b class="rule-key">1</b> 單（不連續）`
-    : `每股最多 <b class="rule-key">${psm}</b> 單（同時持有）`;
+    ? `每股 ${J("perSymMax", "1")} 單（不連續）`
+    : `每股最多 ${J("perSymMax", String(psm))} 單（同時持有）`;
 
   const cat = (icon, name, body) =>
     `<div class="rule-line">` +
@@ -10736,60 +10784,64 @@ function _renderSimRule() {
 
   // ===== 各分類內容 =====
   const lineScan =
-    `每 <b class="rule-key">${sec}s</b> 掃描備選清單，同時滿足：` +
-    `① <b class="rule-key">漲 0.3% 機率 ≥ ${w030}%</b>` +
-    `<span class="rule-sep">且</span>② <b class="rule-key">漲 0.5% 機率 ≥ ${w050}%</b>` +
-    `<span class="rule-sep">且</span>③ 保護等級 <b class="rule-key">L${lv}</b> → ${gradMap[lv]}` +
-    (mpr > 0 ? `<span class="rule-sep">且</span>④ 股價 <b class="rule-key">≥ $${mpr}</b>` : "") +
+    `每 ${J("scanIntervalSec", `${sec}s`)} 掃描備選清單，同時滿足：` +
+    `① <b class="rule-key rule-jump" data-jump-key="wrMin" title="點擊跳到「wrMin」設定">漲 0.3% 機率 ≥ ${w030}%</b>` +
+    `<span class="rule-sep">且</span>② <b class="rule-key rule-jump" data-jump-key="wrMin050" title="點擊跳到「wrMin050」設定">漲 0.5% 機率 ≥ ${w050}%</b>` +
+    `<span class="rule-sep">且</span>③ 保護等級 ${J("gradientLevel", `L${lv}`)} → ${gradMap[lv]}` +
+    (mpr > 0 ? `<span class="rule-sep">且</span>④ 股價 ${J("minPriceUsd", `≥ $${mpr}`)}` : "") +
     `；通過者依 <b class="rule-up">漲 0.3% 機率高→低</b> 排序。`;
 
   const lineTarget =
-    `目標漲幅 <b class="rule-key">+${tgt}%</b>` +
-    `<span class="rule-sep">·</span>持單時限 <b class="rule-key">${winLbl}</b>` +
+    `目標漲幅 ${J("targetPct", `+${tgt}%`)}` +
+    `<span class="rule-sep">·</span>持單時限 ${J("windowMin", winLbl)}` +
     `<span class="rule-sep">·</span>回本門檻 <b class="rule-key">${beStr}</b>` +
     `（含來回手續費，目標須 &gt; 此值才獲利）`;
 
   const lineSize =
-    `同時持單上限 <b class="rule-key">${conc}</b> 單` +
+    `同時持單上限 ${J("concurrency", String(conc))} 單` +
     `<span class="rule-sep">·</span>${psmStr}` +
     `<span class="rule-sep">·</span>` +
     (amt > 0
-      ? `每筆 <b class="rule-key">USD $${amt.toLocaleString("en-US")}</b> <span class="rule-mute">(≈ NT$ ${amtTwdStr} 萬 @ ${fxRate.toFixed(1)})</span>`
-      : `<b class="rule-down">不下單</b>（金額 = $0，僅統計）`);
+      ? `每筆 ${J("amountPerTradeUsd", `USD $${amt.toLocaleString("en-US")}`)} <span class="rule-mute">(≈ NT$ ${amtTwdStr} 萬 @ ${fxRate.toFixed(1)})</span>`
+      : `${J("amountPerTradeUsd", "<span class=\"rule-down\">不下單</span>")}（金額 = $0，僅統計）`);
 
   const exitParts = [];
   exitParts.push(sl > 0
-    ? `停損 <b class="rule-down">-${sl.toFixed(2)}%</b>`
-    : `停損 <span class="rule-mute">關閉</span>`);
+    ? `停損 ${J("stopLossPct", `-${sl.toFixed(2)}%`)}`
+    : `停損 ${J("stopLossPct", "<span class=\"rule-mute\">關閉</span>")}`);
   exitParts.push(tsl > 0
-    ? `移動停利 <b class="rule-up">${tsl.toFixed(2)}%</b>`
-    : `移動停利 <span class="rule-mute">關閉</span>`);
+    ? `移動停利 ${J("trailingStopPct", `${tsl.toFixed(2)}%`)}`
+    : `移動停利 ${J("trailingStopPct", "<span class=\"rule-mute\">關閉</span>")}`);
   exitParts.push(dks > 0
-    ? `今日 Kill <b class="rule-down">-$${dks.toLocaleString("en-US")}</b>`
-    : `今日 Kill <span class="rule-mute">關閉</span>`);
+    ? `今日 Kill ${J("dailyMaxLossUsd", `-$${dks.toLocaleString("en-US")}`)}`
+    : `今日 Kill ${J("dailyMaxLossUsd", "<span class=\"rule-mute\">關閉</span>")}`);
   const lineExit = exitParts.join(`<span class="rule-sep">·</span>`);
 
   const lineCost =
-    `買進 <b class="rule-key">$${fbUsd.toFixed(2)}</b>` +
-    (fbPct > 0 ? ` + <b class="rule-key">${fbPct.toFixed(3)}%</b>` : "") +
-    `<span class="rule-sep">·</span>賣出 <b class="rule-key">$${fsUsd.toFixed(2)}</b>` +
-    (fsPct > 0 ? ` + <b class="rule-key">${fsPct.toFixed(3)}%</b>` : "") +
-    `<span class="rule-sep">·</span>匯率 <b class="rule-key">1 USD = ${fxRate.toFixed(1)} TWD</b>`;
+    `買進 ${J("feeBuyUsd", `$${fbUsd.toFixed(2)}`)}` +
+    (fbPct > 0 ? ` + ${J("feeBuyPct", `${fbPct.toFixed(3)}%`)}` : "") +
+    `<span class="rule-sep">·</span>賣出 ${J("feeSellUsd", `$${fsUsd.toFixed(2)}`)}` +
+    (fsPct > 0 ? ` + ${J("feeSellPct", `${fsPct.toFixed(3)}%`)}` : "") +
+    `<span class="rule-sep">·</span>匯率 ${J("fxUsdTwd", `1 USD = ${fxRate.toFixed(1)} TWD`)}`;
 
   const execBits = [];
   execBits.push(isWs
-    ? `<b class="rule-down">WS 實交</b>（ws://127.0.0.1:1088/）`
-    : `<b class="rule-up">本機模擬</b>`);
-  execBits.push(`進場模式 <b class="rule-key">${_simEntryModeLabel(mode)}</b>`);
+    ? `<b class="rule-key rule-jump rule-down" data-jump-key="executionMode" title="點擊跳到「executionMode」設定">WS 實交</b>（ws://127.0.0.1:1088/）`
+    : `<b class="rule-key rule-jump rule-up" data-jump-key="executionMode" title="點擊跳到「executionMode」設定">本機模擬</b>`);
+  execBits.push(`進場模式 ${J("entryMode", _simEntryModeLabel(mode))}`);
   if (isChase) {
-    execBits.push(`追價 每 <b class="rule-key">${cbs}s</b> 加 <b class="rule-key">${cbp}%</b>，最久 <b class="rule-key">${cms}s</b>`);
+    execBits.push(`追價 每 ${J("chaseBumpSec", `${cbs}s`)} 加 ${J("chaseBumpPct", `${cbp}%`)}，最久 ${J("chaseMaxSec", `${cms}s`)}`);
   }
-  execBits.push(`交易時段 <b class="${smCls}">${smLabel}</b>`);
+  execBits.push(`交易時段 <b class="rule-key rule-jump ${smCls}" data-jump-key="sessionMode" title="點擊跳到「sessionMode」設定">${smLabel}</b>`);
   if (extPct > 0 && smode !== "rth") {
-    execBits.push(`盤前/後手續費加成 <b class="rule-key">+${extPct.toFixed(3)}%</b>`);
+    execBits.push(`盤前/後手續費加成 ${J("extendedFeePct", `+${extPct.toFixed(3)}%`)}`);
   }
-  execBits.push(wrRth ? `勝率源 <b class="rule-up">僅盤中 bars</b>` : `勝率源 <b class="rule-down">混合全時段</b>`);
-  execBits.push(isOpt ? `<b class="rule-down">optimistic 樂觀</b>` : `<b class="rule-up">strict 保守</b>`);
+  execBits.push(wrRth
+    ? `勝率源 <b class="rule-key rule-jump rule-up" data-jump-key="wrRthOnly" title="點擊跳到「wrRthOnly」設定">僅盤中 bars</b>`
+    : `勝率源 <b class="rule-key rule-jump rule-down" data-jump-key="wrRthOnly" title="點擊跳到「wrRthOnly」設定">混合全時段</b>`);
+  execBits.push(isOpt
+    ? `<b class="rule-key rule-jump rule-down" data-jump-key="fillMode" title="點擊跳到「fillMode」設定">optimistic 樂觀</b>`
+    : `<b class="rule-key rule-jump rule-up" data-jump-key="fillMode" title="點擊跳到「fillMode」設定">strict 保守</b>`);
   const lineExec = execBits.join(`<span class="rule-sep">·</span>`);
 
   el.innerHTML =
@@ -10799,6 +10851,20 @@ function _renderSimRule() {
     cat("🛡️", "出場", lineExit) +
     cat("💰", "成本", lineCost) +
     cat("⚙️", "執行", lineExec);
+
+  // v.73: 委托點擊→跳跳到該設定（只綁一次，innerHTML 重寫仍不會失效因為委托在 el 上）
+  if (!el._jumpBound) {
+    el._jumpBound = true;
+    el.addEventListener("click", (ev) => {
+      const tgt = ev.target.closest(".rule-jump");
+      if (!tgt || !el.contains(tgt)) return;
+      const k = tgt.dataset.jumpKey;
+      if (!k) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      try { _jumpToSetting(k); } catch (e) {}
+    });
+  }
 
   // ===== 右側 KPI 卡片：最重要的 4 個設定 =====
   const kpiEl = document.getElementById("simRuleKpis");
