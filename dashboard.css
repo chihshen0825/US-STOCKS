@@ -3734,3 +3734,20 @@ select.pretty-select option[value=""] {
 .rule-key.rule-jump:active {
   background: rgba(76, 175, 80, 0.28);
 }
+
+/* v.76: \u9762\u677f\u5c55\u958b\u6642\u6309\u9215\u908a\u6846\u7da0\u8272\u87a2\u706b\u87f2\u9583\u720d\uff1b\u6536\u5408\u6642\u6e05\u9664 */
+.btn-firefly-pulse {
+  position: relative;
+  animation: btnFireflyPulse 1.6s ease-in-out infinite;
+  border-color: #66bb6a !important;
+}
+@keyframes btnFireflyPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.0), 0 0 4px 1px rgba(76, 175, 80, 0.35);
+    border-color: rgba(102, 187, 106, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.18), 0 0 12px 3px rgba(76, 175, 80, 0.75);
+    border-color: #a5d6a7;
+  }
+}

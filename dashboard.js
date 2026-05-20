@@ -6454,6 +6454,13 @@ function bindThresholdPanel() {
   const btn = document.getElementById("thresholdBtn");
   const panel = document.getElementById("thresholdPanel");
   if (!btn || !panel) return;
+  // v.76: 面板展開時 → 按鈕邊框綠色螢火蟲閃爍；收合時清除
+  const _syncThrPulse = () => {
+    const open = !panel.classList.contains("hidden");
+    btn.classList.toggle("btn-firefly-pulse", open);
+  };
+  _syncThrPulse();
+  new MutationObserver(_syncThrPulse).observe(panel, { attributes: true, attributeFilter: ["class"] });
   btn.addEventListener("click", () => {
     panel.classList.toggle("hidden");
     if (!panel.classList.contains("hidden")) renderThresholdPanel();
@@ -9403,6 +9410,8 @@ function bindSimPanel() {
     const collapsed = panel.classList.toggle("collapsed");
     const btn = e.currentTarget;
     btn.innerHTML = `⚙`;
+    // v.76: 展開時讓齒輪鈕邊框綠色螢火蟲閃爍
+    btn.classList.toggle("btn-firefly-pulse", !collapsed);
     try { localStorage.setItem("simPanelCollapsed", collapsed ? "1" : "0"); } catch (_) {}
   });
   // 規則摘要 header（簡介列）→ 收合/展開 rule-line（不影響 rule-groups）
@@ -9424,6 +9433,10 @@ function bindSimPanel() {
       const btn = document.getElementById("simToggleBtn");
       if (panel) panel.classList.add("collapsed");
       if (btn) btn.innerHTML = `⚙`;
+    } else {
+      // v.76: 預設展開→齒輪鈕也要閃爍
+      const btn = document.getElementById("simToggleBtn");
+      if (btn) btn.classList.add("btn-firefly-pulse");
     }
   } catch (_) {}
   bindSimControls();
