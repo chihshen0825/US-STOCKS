@@ -3191,6 +3191,8 @@ sup.stale-warn {
   font-size: 13px; padding: 7px 14px; border-radius: 6px;
   cursor: pointer; font-weight: 700; min-width: 84px;
   border: 1px solid #2f3a48; background: #232932; color: #dfe6ee;
+  line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+  font-family: inherit;
 }
 .precheck-btns button:hover { background: #2a313c; }
 .precheck-btns .btn-ok.primary { background: linear-gradient(135deg, #4fc3f7, #2196f3); color: #0b1115; border-color: #2196f3; }
@@ -3287,6 +3289,9 @@ sup.stale-warn {
   color: #dfe3ea;
   cursor: pointer;
   font-size: 13px;
+  line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: inherit;
   transition: background .1s, transform .05s;
 }
 .confirm-foot button:hover { background: #353b46; }
