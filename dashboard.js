@@ -7690,14 +7690,15 @@ function _jumpToSetting(key) {
   const _flashAndFocus = (el) => {
     if (!el) return;
     try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch { el.scrollIntoView(); }
-    // 控制項本身高亮
+    // v.67: 先清掉之前所有 highlight，避免多個同時亮
+    document.querySelectorAll(".setting-jump-flash, .setting-jump-wrap-flash")
+      .forEach(n => n.classList.remove("setting-jump-flash", "setting-jump-wrap-flash"));
+    // 控制項本身 — 持續放大縮小 + 黃色脈衝（不會自動消失，等下次 jump 才清掉）
     el.classList.add("setting-jump-flash");
-    setTimeout(() => el.classList.remove("setting-jump-flash"), 1800);
     // 父層 label / row 也加邊框，更明顯
     const wrap = el.closest("label, .threshold-row, .sim-ctrl, .sim-cfg-row, tr, div");
     if (wrap && wrap !== el) {
       wrap.classList.add("setting-jump-wrap-flash");
-      setTimeout(() => wrap.classList.remove("setting-jump-wrap-flash"), 1800);
     }
     try { el.focus({ preventScroll: true }); } catch {}
   };

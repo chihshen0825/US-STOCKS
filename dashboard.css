@@ -3503,21 +3503,29 @@ sup.stale-warn {
 }
 .rfm-inline-pop .ria-foot .primary:hover { background: #388e3c; border-color: #66bb6a; }
 
-/* v.62: 跳到設定後的高亮動畫 */
-@keyframes settingJumpFlash {
-  0%   { box-shadow: 0 0 0 0 rgba(255, 235, 59, .9); background-color: rgba(255, 235, 59, .35); }
-  60%  { box-shadow: 0 0 0 6px rgba(255, 235, 59, 0);  background-color: rgba(255, 235, 59, .15); }
-  100% { box-shadow: 0 0 0 0 rgba(255, 235, 59, 0);    background-color: transparent; }
+/* v.62/v.67: 跳到設定後的高亮 — 持續放大縮小脈衝，黃色背景，不自動消失 */
+@keyframes settingJumpPulse {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 0   rgba(255, 235, 59, .85); background-color: rgba(255, 235, 59, .35); }
+  50%  { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(255, 235, 59, 0);   background-color: rgba(255, 235, 59, .55); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0   rgba(255, 235, 59, .85); background-color: rgba(255, 235, 59, .35); }
 }
 .setting-jump-flash {
-  animation: settingJumpFlash 1.6s ease-out;
+  animation: settingJumpPulse 1.2s ease-in-out infinite;
   border-radius: 4px;
+  transform-origin: center;
+  will-change: transform, box-shadow, background-color;
+  position: relative;
+  z-index: 2;
+}
+@keyframes settingJumpWrapPulse {
+  0%, 100% { outline-color: rgba(255, 213, 79, .55); outline-offset: 3px; }
+  50%      { outline-color: rgba(255, 213, 79, 1);   outline-offset: 6px; }
 }
 .setting-jump-wrap-flash {
   outline: 2px solid #ffd54f !important;
   outline-offset: 3px;
   border-radius: 4px;
-  transition: outline-color 0.3s;
+  animation: settingJumpWrapPulse 1.2s ease-in-out infinite;
 }
 /* ============================================================ */
 
