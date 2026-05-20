@@ -9906,9 +9906,17 @@ async function runSimAutoScan(force) {
   const ACTIVE_STATUSES = new Set(["pending", "open", "selling"]);
   const openCount = simTrades.filter(t => ACTIVE_STATUSES.has(t.status)).length;
   let slots = simCfg.concurrency - openCount;
-  if (slots <= 0) {
+  // v.60：診斷掃描開啟時，即使持單已滿也繼續做分析，讓使用者看到「就算有人空位、誰也不會被買」的原因
+  const _slotsFull = slots <= 0;
+  if (_slotsFull && !(simCfg.debugScan && _scopeMode !== "all")) {
     _simLastScan = { time: Date.now(), wlSize: wlData.size, candidates: 0, placed: 0, reason: "持單已滿" };
     _renderSimAutoStatusLive(); return;
+  }
+  if (_slotsFull) {
+    // 進入「只分析、不下單」模式
+    _logOnce("auto-slots-full", 30_000, () => {
+      _logSim("reject", "—", `🚧 持單已滿 — 目前 ${openCount} / 上限 ${simCfg.concurrency}（即使範圍內有候選也不會下單）`, null);
+    });
   }
 
   // 計算每股現有持單數（同樣納入 pending，避免同一檔在限價排隊時又被重複追單）
@@ -10030,7 +10038,7 @@ async function runSimAutoScan(force) {
     ? (rejectBreakdown.length
         ? `0 候選\n${rejectBreakdown.join("\n")}`
         : "無符合條件個股")
-    : (placed > 0 ? `下單 ${placed} 筆（限價挂單，待成交）` : "有候選但無可用價");
+    : (placed > 0 ? `下單 ${placed} 筆（限價挂單，待成交）` : (_slotsFull ? `持單已滿 (${openCount}/${simCfg.concurrency})` : "有候選但無可用價"));
 
   _simLastScan = {
     time: Date.now(),
@@ -10042,8 +10050,13 @@ async function runSimAutoScan(force) {
   };
   _renderSimAutoStatusLive();
   // v.26 診斷模式：把詳細拒絕原因寫入 console（每次 scan）+ 試單日誌（每次 scan，去重 30s）
+  // v.60：條件放寬 — 只要 debugScan + 非「全部」範圍，就一律輸出 per-stock 不符規則 log，
+  // 包含「持單已滿但沒有候選會被買」或「有候選但 slot 滿」的情境，讓使用者不再撲空。
+  const _shouldScopeDebug = simCfg.debugScan && _scopeMode !== "all" && rows.length > 0;
   if (simCfg.debugScan && candidates.length === 0 && rejectBreakdown.length) {
     try { console.log("[sim debug] 0 候選 — 拒絕原因 breakdown:\n  " + rejectBreakdown.join("\n  ")); } catch {}
+  }
+  if ((simCfg.debugScan && candidates.length === 0 && rejectBreakdown.length) || _shouldScopeDebug) {
     // v.33 找「最接近通過」的標的：列出全部不符項與如何調設定可以買到
     let bestRejectInfo = null;
     // v.59：所有 row 的詳細不符項，給非全範圍時逐檔輸出 log
@@ -10168,7 +10181,12 @@ async function runSimAutoScan(force) {
     } catch (e) { try { console.warn("[sim debug] bestRejectAll error", e); } catch {} }
 
     _logOnce("auto-scan-debug-empty", 30_000, () => {
-      _logSim("reject", "—", `🔍 掃描 ${rows.length} 檔 → 0 候選`, { top: rejectBreakdown.slice(0, 3).join(" | ") });
+      // v.60：標題依情境變化
+      const _scopeLbl = _autoScopeLabel(_scopeMode);
+      const _summary = candidates.length === 0
+        ? `🔍 [${_scopeLbl}] 掃描 ${rows.length} 檔 → 0 候選`
+        : `🔍 [${_scopeLbl}] 掃描 ${rows.length} 檔 → ${candidates.length} 候選${_slotsFull ? "（但持單已滿不下單）" : ""}`;
+      _logSim("reject", "—", _summary, { top: rejectBreakdown.slice(0, 3).join(" | ") || "(全部通過)" });
       if (bestRejectInfo) {
         // 一行一個失敗項，方便閱讀
         const note = `${bestRejectInfo.sym} (wr030/050/050d=${bestRejectInfo.wr}) 缺 ${bestRejectInfo.fails.length} 項：\n` + bestRejectInfo.fails.map((s, i) => `  ${i+1}. ${s}`).join("\n");
