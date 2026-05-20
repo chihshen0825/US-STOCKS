@@ -2053,7 +2053,7 @@ function bindPanelTabHotkeys() {
       try { window.scrollTo({ top: bottom, behavior: "smooth" }); } catch { window.scrollTo(0, bottom); }
       return;
     }
-    const jumpMap = { w: "watchlist", s: "simPanel", c: "catalogEditor" };
+    const jumpMap = { g: "panelTabs", w: "watchlist", s: "simPanel", c: "catalogEditor" };
     if (jumpMap[k]) {
       const el = document.getElementById(jumpMap[k]);
       if (el) {
