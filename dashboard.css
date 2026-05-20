@@ -393,6 +393,15 @@ button.ghost  { color: #9aa0a6; }
 }
 .card .card-idx:active { cursor: grabbing; }
 .card:hover .card-idx { background: linear-gradient(135deg, #ffb074 0%, #ff85a1 55%, #d63a73 100%); }
+/* v.53 「額外自選頁籤」(冷色冰河極光) —— 其卡片上的索引球恢復為藍色系
+#grid[data-panel="watch"] .card .card-idx {
+  background: linear-gradient(135deg, #4fc3f7 0%, #5e7cff 55%, #7c4dff 100%);
+  color: #f0f8ff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5), 0 0 6px rgba(79,195,247,0.45);
+}
+#grid[data-panel="watch"] .card:hover .card-idx {
+  background: linear-gradient(135deg, #80d8ff 0%, #7a9bff 55%, #9575ff 100%);
+}
 .card:hover { border-color: #3a4250; transform: translateY(-1px); }
 .card[draggable="true"] { cursor: grab; }
 .card.dragging { opacity: .4; cursor: grabbing; }

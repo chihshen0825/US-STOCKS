@@ -1689,6 +1689,8 @@ function renderCatalogEditor() {
 function buildGrid() {
   const grid = $("grid");
   grid.innerHTML = "";
+  // v.53 將目前 active panel 寫入 dataset，供 CSS 根據頁籤色調套用不同 .card-idx 色
+  try { grid.dataset.panel = activePanelId || ""; } catch {}
   const tpl = $("cardTpl");
   symbols.forEach((sym, i) => {
     const node = tpl.content.cloneNode(true);
