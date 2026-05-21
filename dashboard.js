@@ -1167,8 +1167,11 @@ function bindUI() {
       barCount = n;
       chrome.storage?.local.set({ [BAR_COUNT_KEY]: n });
       updateChartLabels();
-      await quickRefreshAll();
-      await heavyRefreshAll();
+      // v.87: 純重繪以避開 quickRefreshAll/heavyRefreshAll 的 _inflight 防重入旗標。
+      // 否則使用者跳選 600 時若剛好碰上週期性 refresh 進行中，兩個 await 都會被
+      // inflight guard 略過 → spark / MACD 不會以新的 barCount 重畫；必須慢慢調才會
+      // 偶爾命中 idle window 才生效。資料層仍由週期性 refresh 維持新鮮。
+      await rerenderAllCardsForBarCount();
     });
   }
   updateChartLabels();
@@ -2386,7 +2389,21 @@ async function heavyRefreshAll() {
   } finally { _heavyRefreshInflight = false; }
 }
 
-// ── 「今日快照」快取：昨日收盤 + 即時價 + 高低量 + 市場狀態
+// v.87: 純重繪所有卡片以新 barCount 重畫 spark / MACD。
+// 不會被 quick/heavyRefreshAll 的 _inflight 旗標攔截；資料新鮮度仍由週期性 refresh 維持。
+// intra 走 fetchIntraday → _chartCache（1.5s TTL）命中即取，無新請求；heavy 走 heavyCache。
+async function rerenderAllCardsForBarCount() {
+  await Promise.all(symbols.map(async (sym) => {
+    const card = cardOf(sym);
+    if (!card) return;
+    try {
+      const intra = await fetchIntraday(sym);
+      renderQuick(card, sym, intra);
+    } catch {}
+    const heavy = heavyCache.get(sym);
+    if (heavy) { try { renderHeavy(card, sym, heavy); } catch {} }
+  }));
+}
 // 使用独立的日線拉取（range=5d&interval=1d），讓不同時間框架都共用同一個來源，
 // 避免切換 1m/5m/30m/60m 時個股价、高低、量跳動。 ──
 const dailySnap = new Map(); // sym -> { ts, value: { prevClose, price, high, low, volume, avgDaily, marketState, name, meta } }
