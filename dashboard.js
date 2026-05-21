@@ -462,8 +462,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 async function loadInterval() {
   return new Promise(resolve => {
     chrome.storage?.local.get([INTERVAL_KEY], (r) => {
-      const sec = parseInt(r?.[INTERVAL_KEY], 10);
-      if (sec >= 1 && sec <= 30) quoteRefreshMs = sec * 1000;
+      const sec = parseFloat(r?.[INTERVAL_KEY]);
+      if (Number.isFinite(sec) && sec >= 0.1 && sec <= 30) quoteRefreshMs = Math.round(sec * 1000);
       resolve();
     });
   });
@@ -995,8 +995,9 @@ function bindUI() {
   if (sel) {
     sel.value = String(quoteRefreshMs / 1000);
     sel.addEventListener("change", () => {
-      const sec = Math.max(1, Math.min(30, parseInt(sel.value, 10) || 5));
-      quoteRefreshMs = sec * 1000;
+      const raw = parseFloat(sel.value);
+      const sec = Math.max(0.1, Math.min(30, Number.isFinite(raw) ? raw : 5));
+      quoteRefreshMs = Math.round(sec * 1000);
       chrome.storage?.local.set({ [INTERVAL_KEY]: sec });
       if (autoRefreshEnabled) startTimers();
     });
