@@ -333,6 +333,11 @@ function marketAvgPct() {
   return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
 const heavyCache = new Map();
+// v.89: 拖曳看歷史股價 / MACD
+//   _viewOffset: sym -> 距右邊「現在」的 bar 數（0 = 販枳「最新」）
+//   _lastIntra : renderQuick 最近一次的 intra 快照，供拖曳重繪使用。
+const _viewOffset = new Map();
+const _lastIntra = new Map();
 let wlSortKey = "sym"; let wlSortDesc = false;
 const wlData = new Map();
 // 釘選的股票代碼（依目前順序排列），會永遠顯示在備選清單最上方，不受排序影響。
@@ -3145,7 +3150,19 @@ function renderQuick(card, sym, intra) {
   setOHL(".ohl-prevH",  intra.prevHigh,  basePrev);
   setOHL(".ohl-prevL",  intra.prevLow,   basePrev);
   setOHL(".ohl-prevC",  intra.prevClose, basePrev);
-  drawSpark(card.querySelector(".spark"), intra.bars.slice(-barCount), intra.prevClose, computeLevels(intra));
+  // v.89 拖曳：依 _viewOffset 取以「現在」為右邊、向左偏移 N 根的窗年
+  _lastIntra.set(sym, intra);
+  {
+    const _total = intra.bars.length;
+    const _maxOff = Math.max(0, _total - 1);
+    const _off = Math.max(0, Math.min(_maxOff, _viewOffset.get(sym) || 0));
+    const _end = _total - _off;
+    const _sliced = intra.bars.slice(Math.max(0, _end - barCount), _end);
+    const _spark = card.querySelector(".spark");
+    drawSpark(_spark, _sliced, intra.prevClose, computeLevels(intra));
+    _drawOffsetBadge(_spark, _off);
+    _bindChartPan(card, sym);
+  }
   drawWinRate(card, intra.bars, sym);
   bindWrMiniClicks(card, sym);
   bindWsTestButton(card, sym);
@@ -3303,7 +3320,24 @@ function renderHeavy(card, sym, heavy) {
         `<span title="${tipSig}" style="color:#ffb74d"><b>Sig</b> ${fmt(s,3)}</span> │ ` +
         `<span title="${tipHist}" style="color:${histColor}"><b>Hist</b> ${fmt(h,3)}</span>`;
     }
-    drawMACD(card.querySelector(".macd"), heavy.macd, heavy.bars, barCount);
+    // v.89 拖曳：MACD 以同一個 _viewOffset 倏一致偏移窗年
+    {
+      const _m = heavy.macd;
+      const _total = (heavy.bars && heavy.bars.length) || _m.macd.length;
+      const _maxOff = Math.max(0, _total - 1);
+      const _off = Math.max(0, Math.min(_maxOff, _viewOffset.get(sym) || 0));
+      const _end = _total - _off;
+      const _m2 = {
+        macd: _m.macd.slice(0, _end),
+        sig:  _m.sig.slice(0, _end),
+        hist: _m.hist.slice(0, _end),
+      };
+      const _bars2 = (heavy.bars || []).slice(0, _end);
+      const _mc = card.querySelector(".macd");
+      drawMACD(_mc, _m2, _bars2, barCount);
+      _drawOffsetBadge(_mc, _off);
+      _bindChartPan(card, sym);
+    }
   }
   if (heavy.rsi && heavy.rsi.length) {
     const r = heavy.rsi[heavy.rsi.length - 1];
@@ -5718,6 +5752,93 @@ function drawMACD(canvas, m, bars, n) {
   ctx.textBaseline = "bottom";
   ctx.fillText(`H±${histHalf.toFixed(3)}`, PW - 2, PH - 2);
   ctx.restore();
+}
+
+// v.89: 在 spark / MACD canvas 左上角畫一個小徽章顯示目前的「往左平移幾根」
+function _drawOffsetBadge(canvas, off) {
+  if (!canvas || !off) return;
+  const ctx = canvas.getContext("2d");
+  ctx.save();
+  ctx.font = "bold 10px 'Segoe UI', sans-serif";
+  ctx.textBaseline = "middle";
+  const text = `← ${off} 根  雙擊回到最新`;
+  const tw = ctx.measureText(text).width;
+  const w = tw + 10, h = 16;
+  ctx.fillStyle = "rgba(15,17,21,0.85)";
+  ctx.strokeStyle = "#ffb74d";
+  ctx.lineWidth = 1;
+  roundRect(ctx, 2, 2, w, h, 3);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#ffb74d";
+  ctx.fillText(text, 7, 2 + h / 2);
+  ctx.restore();
+}
+
+// v.89: 重繪單張卡片以套用最新 _viewOffset（不重抓資料）。
+function _rerenderCardOffset(sym) {
+  const card = cardOf(sym);
+  if (!card) return;
+  const intra = _lastIntra.get(sym);
+  if (intra) { try { renderQuick(card, sym, intra); } catch {} }
+  const heavy = heavyCache.get(sym);
+  if (heavy) { try { renderHeavy(card, sym, heavy); } catch {} }
+}
+
+// v.89: 綁定 spark / MACD canvas 的拖曳平移；同一 canvas 只綁一次。
+//   拖曳右 = 看更早的歷史；拖曳左 = 回到較新；雙擊 = 重設回最新。
+function _bindChartPan(card, sym) {
+  ["spark", "macd"].forEach(cls => {
+    const canvas = card.querySelector("." + cls);
+    if (!canvas || canvas._panBound) return;
+    canvas._panBound = true;
+    canvas.style.cursor = "grab";
+    canvas.style.touchAction = "pan-y";
+    let dragging = false, startX = 0, startOffset = 0, moved = false;
+    canvas.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      dragging = true; moved = false;
+      startX = e.clientX;
+      startOffset = _viewOffset.get(sym) || 0;
+      try { canvas.setPointerCapture(e.pointerId); } catch {}
+      canvas.style.cursor = "grabbing";
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      if (Math.abs(dx) < 2) return;
+      moved = true;
+      const W = Math.max(1, (canvas.clientWidth || canvas.width) - 44); // 扣掉右側 AXIS_W
+      const barsPerPx = barCount / W;
+      let next = startOffset + Math.round(dx * barsPerPx);
+      const intra = _lastIntra.get(sym);
+      const heavy = heavyCache.get(sym);
+      const total = Math.max(intra?.bars?.length || 0, heavy?.bars?.length || 0);
+      const maxOffset = Math.max(0, total - Math.max(2, Math.min(barCount, total)));
+      next = Math.max(0, Math.min(maxOffset, next));
+      if (next !== (_viewOffset.get(sym) || 0)) {
+        _viewOffset.set(sym, next);
+        _rerenderCardOffset(sym);
+      }
+    });
+    const endDrag = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      canvas.style.cursor = "grab";
+      try { canvas.releasePointerCapture(e.pointerId); } catch {}
+      // 拖動過程吞掉後續可能觸發的 click（避免誤觸 spark 上的支撐 / 阻力 hover/click）
+      if (moved) {
+        const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); canvas.removeEventListener("click", swallow, true); };
+        canvas.addEventListener("click", swallow, true);
+      }
+    };
+    canvas.addEventListener("pointerup", endDrag);
+    canvas.addEventListener("pointercancel", endDrag);
+    canvas.addEventListener("dblclick", () => {
+      if ((_viewOffset.get(sym) || 0) === 0) return;
+      _viewOffset.set(sym, 0);
+      _rerenderCardOffset(sym);
+    });
+  });
 }
 
 // 右側價格軸
